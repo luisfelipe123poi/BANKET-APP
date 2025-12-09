@@ -384,6 +384,93 @@ def create_free_license_internal(email):
         "credits": credits
     }
 
+@app.route("/auth/request_code", methods=["POST"])
+def request_code():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"ok": False, "error": "Email requerido"}), 400
+
+    print(f"🟢 Código enviado (simulado) a {email}")
+
+    return jsonify({"ok": True, "msg": "Código enviado"})
+
+@app.route("/auth/verify", methods=["POST"])
+def verify_code():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"ok": False, "error": "Email requerido"}), 400
+
+    return jsonify(create_free_license_internal(email))
+
+@app.route("/license/validate", methods=["POST"])
+def validate_license():
+    data = request.json
+    key = data.get("license_key")
+
+    lic = get_license_by_key(key)
+    if not lic:
+        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
+
+    return jsonify({
+        "ok": True,
+        "email": lic["email"],
+        "plan": lic["plan"],
+        "credits": lic["credits_left"],
+        "status": lic["status"],
+        "expires_at": lic["expires_at"],
+    })
+
+@app.route("/license/info", methods=["GET"])
+def license_info():
+    key = request.args.get("key")
+    lic = get_license_by_key(key)
+
+    if not lic:
+        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
+
+    return jsonify({"ok": True, "data": lic})
+
+@app.route("/license/use-credit", methods=["POST"])
+def use_credit():
+    data = request.json
+    key = data.get("license_key")
+
+    lic = get_license_by_key(key)
+    if not lic:
+        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
+
+    if lic["credits_left"] <= 0:
+        return jsonify({"ok": False, "error": "Sin créditos"}), 403
+
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE licenses SET credits_left = credits_left - 1 WHERE license_key = ?",
+        (key,),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True, "credits_left": lic["credits_left"] - 1})
+
+@app.route("/create-checkout-session", methods=["GET"])
+def create_checkout():
+    email = request.args.get("email")
+    price_id = request.args.get("priceId")
+
+    session = stripe.checkout.Session.create(
+        customer_email=email,
+        line_items=[{"price": price_id, "quantity": 1}],
+        mode="subscription",
+        success_url="https://stripe-backend-r14f.onrender.com/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url="https://stripe-backend-r14f.onrender.com/cancel",
+    )
+
+    return redirect(session.url, code=302)
 
 
 @app.route("/auth/verify", methods=["GET"])
@@ -1058,6 +1145,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
