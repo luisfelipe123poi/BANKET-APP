@@ -18,16 +18,22 @@ from sib_api_v3_sdk import Configuration, ApiClient, TransactionalEmailsApi
 from sib_api_v3_sdk.models import SendSmtpEmail
 
 import os
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
+
+# Cargar API Key desde variables de entorno
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
 BREVO_SENDER_EMAIL = "turboclipsapp@gmail.com"
 BREVO_SENDER_NAME = "TurboClips"
 
-config = Configuration()
+# ---- CONFIGURACIÓN CORRECTA DE BREVO ----
 configuration = sib_api_v3_sdk.Configuration()
-configuration.api_key['api-key'] = BREVO_API_KEY
-brevo_client = ApiClient(config)
-brevo_email_api = TransactionalEmailsApi(brevo_client)
+configuration.api_key["api-key"] = BREVO_API_KEY
+
+brevo_client = sib_api_v3_sdk.ApiClient(configuration)
+brevo_email_api = sib_api_v3_sdk.TransactionalEmailsApi(brevo_client)
+
 
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
@@ -1217,6 +1223,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
