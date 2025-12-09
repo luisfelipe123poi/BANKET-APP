@@ -17,12 +17,15 @@ import time
 from sib_api_v3_sdk import Configuration, ApiClient, TransactionalEmailsApi
 from sib_api_v3_sdk.models import SendSmtpEmail
 
-BREVO_API_KEY = "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"
+import os
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+
 BREVO_SENDER_EMAIL = "turboclipsapp@gmail.com"
 BREVO_SENDER_NAME = "TurboClips"
 
 config = Configuration()
-config.api_key['api-key'] = BREVO_API_KEY
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key['api-key'] = BREVO_API_KEY
 brevo_client = ApiClient(config)
 brevo_email_api = TransactionalEmailsApi(brevo_client)
 
@@ -700,6 +703,7 @@ def validate_license():
     data = request.get_json() or {}
     key = data.get("license_key") or data.get("key")
 
+
     if not key:
         return jsonify({"valid": False, "reason": "license_key_required"}), 400
 
@@ -1213,9 +1217,6 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
-
-
-
 
 
 
