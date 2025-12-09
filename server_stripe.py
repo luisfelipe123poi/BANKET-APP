@@ -32,6 +32,7 @@ if not STRIPE_SECRET_KEY:
 
 stripe.api_key = STRIPE_SECRET_KEY
 
+print("✅ Stripe key cargada:", STRIPE_SECRET_KEY[:12], "...OK")
 
 # ======================
 # 🔐 BREVO CONFIG
@@ -1219,6 +1220,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
