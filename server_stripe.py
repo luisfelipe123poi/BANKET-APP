@@ -597,44 +597,76 @@ def validate_license():
         if not license_row:
             return jsonify({"valid": False, "reason": "license_not_found"}), 404
 
-        # Check status
+        # Estado de la licencia
         if license_row["status"] not in ("active", "trialing"):
-            return jsonify({"valid": False, "reason": "inactive", "license": license_row}), 403
+            return jsonify({"valid": False, "reason": "inactive"}), 403
 
+        # Verificar expiración
         if license_row.get("expires_at"):
             try:
                 expires = datetime.fromisoformat(license_row["expires_at"])
                 if expires < datetime.utcnow():
-                    return jsonify({"valid": False, "reason": "expired", "license": license_row}), 403
+                    return jsonify({"valid": False, "reason": "expired"}), 403
             except Exception:
                 pass
 
-        # Return license info including credits
+        # Licencia limpia y actualizada
         out = dict(license_row)
-        # ensure metadata parsed
+
+        # Limpiar metadata
         try:
             out["metadata"] = json.loads(out.get("metadata") or "{}")
         except Exception:
-            out["metadata"] = out.get("metadata")
-        return jsonify({"valid": True, "license": out})
+            out["metadata"] = {}
+
+        # ✅ RESPUESTA CLAVE PARA TU APP
+        return jsonify({
+            "valid": True,
+            "license": {
+                "license_key": out["license_key"],
+                "email": out.get("email"),
+                "plan": out.get("plan"),
+                "status": out.get("status"),
+                "credits": out.get("credits"),
+                "credits_left": out.get("credits_left")
+            }
+        })
+
     elif email:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT * FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1", (email,))
         row = cur.fetchone()
         conn.close()
+
         if not row:
             return jsonify({"valid": False, "reason": "no_license_for_email"}), 404
+
         license_row = dict(row)
+
         if license_row["status"] not in ("active", "trialing"):
-            return jsonify({"valid": False, "reason": "inactive", "license": license_row}), 403
+            return jsonify({"valid": False, "reason": "inactive"}), 403
+
         try:
             license_row["metadata"] = json.loads(license_row.get("metadata") or "{}")
         except Exception:
-            pass
-        return jsonify({"valid": True, "license": license_row})
+            license_row["metadata"] = {}
+
+        return jsonify({
+            "valid": True,
+            "license": {
+                "license_key": license_row["license_key"],
+                "email": license_row.get("email"),
+                "plan": license_row.get("plan"),
+                "status": license_row.get("status"),
+                "credits": license_row.get("credits"),
+                "credits_left": license_row.get("credits_left")
+            }
+        })
+
     else:
         return jsonify({"error": "license_key o email requerido"}), 400
+
 
 @app.route("/license/redeem", methods=["POST"])
 def redeem_license():
@@ -994,5 +1026,6 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
