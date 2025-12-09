@@ -601,7 +601,8 @@ def validate_license():
     # --- 🔁 FORZAR SYNC CON STRIPE ---
     try:
         import stripe
-        stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+        stripe.api_key = STRIPE_SECRET_KEY
+
 
         if lic.get("stripe_customer_id"):
             subs = stripe.Subscription.list(
@@ -1009,6 +1010,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
