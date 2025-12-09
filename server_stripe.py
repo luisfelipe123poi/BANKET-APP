@@ -890,7 +890,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/banner.png",
+            "image": "https://drive.google.com/uc?export=download&id=1FmzuVNOrZ62kN3Vhsq7y-Jr2rDnsmzjh",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -904,23 +904,23 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad1.png",
+            "image": "https://drive.google.com/uc?export=download&id=1Z5CTKCq79PcUaWycIJ_2898waMseWROD",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad2.png",
+            "image": "https://drive.google.com/uc?export=download&id=15JzTgtE7IFyW6zI2kxRiAx3OOc7CFb_J",
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad3.png",
+            "image": "https://drive.google.com/uc?export=download&id=1WGs5_omS7-nlEJG4ItqJ8FRRNfybMgtu",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad4.png",
+            "image": "https://drive.google.com/uc?export=download&id=1T-9yS9iq9aK1zeh36aFSl5O-sfOIS7kj",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad5.png",
+            "image": "https://drive.google.com/uc?export=download&id=1CVycJrhDGUzXtmDef_897MYZ0DBCwOBy",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -994,4 +994,5 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
