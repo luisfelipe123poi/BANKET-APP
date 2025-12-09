@@ -58,7 +58,7 @@ PUBLIC_DOMAIN = os.environ.get("PUBLIC_DOMAIN", "https://stripe-backend-r14f.onr
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Necesitas establecer STRIPE_SECRET_KEY en tus variables de entorno.")
 
-stripe.api_key = "sk_test_51ScJg4GznS3gtqcWUsEQnlztLbbxxPDKDkXPH2rToHd1fxQaMAZOJpg9P9HjPNJPfDnDgh18s9Ihb0i6kGS1HKaH0068SN4oet"
+
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "stripe_licenses.db")
 
