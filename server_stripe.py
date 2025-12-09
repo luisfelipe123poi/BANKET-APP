@@ -655,32 +655,24 @@ def validate_license():
 @app.route("/license/redeem", methods=["POST"])
 def redeem_license():
     data = request.get_json() or {}
+
     cust = data.get("stripe_customer_id")
     sub = data.get("stripe_subscription_id")
     email = (data.get("email") or "").strip().lower()
     plan = data.get("plan", "pro")
     expires = data.get("expires_at")
-    credits = data.get("credits", None)
+    credits = data.get("credits")
 
     if not (cust and sub and email):
-        return jsonify({"error": "stripe_customer_id, stripe_subscription_id y email son requeridos"}), 400
-
-    status = "active"
-    expires_dt = None
-    if expires:
-        try:
-            expires_dt = datetime.fromisoformat(expires)
-        except Exception:
-            expires_dt = None
+        return jsonify({"error": "Faltan datos obligatorios"}), 400
 
     # Normalizar plan
     plan_key = plan.lower().split("_")[0]
 
-    # Si no vienen créditos, usar defaults
+    # Si no hay créditos enviados → usar default
     if credits is None:
         credits = PLAN_DEFAULT_CREDITS.get(plan_key, 100)
 
-    # 🔍 Buscar licencia existente por email
     existing = get_license_by_email(email)
 
     if existing:
@@ -689,51 +681,37 @@ def redeem_license():
         cur = conn.cursor()
         cur.execute("""
             UPDATE licenses 
-            SET 
-                stripe_customer_id = ?,
-                stripe_subscription_id = ?,
-                plan = ?,
-                status = ?,
-                expires_at = ?,
-                credits = ?,
-                credits_left = ?
-            WHERE email = ?
+            SET stripe_customer_id=?,
+                stripe_subscription_id=?,
+                plan=?,
+                status='active',
+                credits=?,
+                credits_left=?
+            WHERE email=?
         """, (
-            cust,
-            sub,
-            plan_key,
-            status,
-            expires_dt.isoformat() if expires_dt else None,
-            credits,
-            credits,
-            email
+            cust, sub, plan_key, credits, credits, email
         ))
         conn.commit()
         conn.close()
 
-        license_key = existing["license_key"]
+        return jsonify({"ok": True, "message": "Licencia actualizada"})
 
-    else:
-        # 🆕 Crear licencia solo si no existe
-        license_key = gen_license()
-        save_license(
-            license_key,
-            cust,
-            sub,
-            email,
-            plan_key,
-            status,
-            expires_dt,
-            metadata={"created_via": "webhook"},
-            credits=credits
-        )
+    # ✅ CREAR NUEVA LICENCIA
+    license_key = gen_license()
+    save_license(
+        license_key,
+        cust,
+        sub,
+        email,
+        plan_key,
+        "active",
+        None,
+        {"source": "stripe_checkout"},
+        credits=credits
+    )
 
-    return jsonify({
-        "ok": True,
-        "license_key": license_key,
-        "plan": plan_key,
-        "email": email
-    })
+    return jsonify({"ok": True, "license_key": license_key})
+
 
 # -------------------------
 # Usage endpoint: decrement credits atomically
@@ -1063,6 +1041,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
