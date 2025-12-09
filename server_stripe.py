@@ -590,82 +590,65 @@ def create_portal_session():
 def validate_license():
     data = request.get_json() or {}
     key = data.get("license_key")
-    email = data.get("email")
 
-    if key:
-        license_row = get_license_by_key(key)
-        if not license_row:
-            return jsonify({"valid": False, "reason": "license_not_found"}), 404
+    if not key:
+        return jsonify({"valid": False, "reason": "license_key_required"}), 400
 
-        # Estado de la licencia
-        if license_row["status"] not in ("active", "trialing"):
-            return jsonify({"valid": False, "reason": "inactive"}), 403
+    lic = get_license_by_key(key)
+    if not lic:
+        return jsonify({"valid": False, "reason": "not_found"}), 404
 
-        # Verificar expiración
-        if license_row.get("expires_at"):
-            try:
-                expires = datetime.fromisoformat(license_row["expires_at"])
-                if expires < datetime.utcnow():
-                    return jsonify({"valid": False, "reason": "expired"}), 403
-            except Exception:
-                pass
+    # --- 🔁 FORZAR SYNC CON STRIPE ---
+    try:
+        import stripe
+        stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
-        # Licencia limpia y actualizada
-        out = dict(license_row)
+        if lic.get("stripe_customer_id"):
+            subs = stripe.Subscription.list(
+                customer=lic["stripe_customer_id"],
+                status="all",
+                limit=1
+            )
 
-        # Limpiar metadata
-        try:
-            out["metadata"] = json.loads(out.get("metadata") or "{}")
-        except Exception:
-            out["metadata"] = {}
+            if subs.data:
+                sub = subs.data[0]
+                price_id = sub["items"]["data"][0]["price"]["id"]
 
-        # ✅ RESPUESTA CLAVE PARA TU APP
-        return jsonify({
-            "valid": True,
-            "license": {
-                "license_key": out["license_key"],
-                "email": out.get("email"),
-                "plan": out.get("plan"),
-                "status": out.get("status"),
-                "credits": out.get("credits"),
-                "credits_left": out.get("credits_left")
-            }
-        })
+                # MAPEAR PRICE_ID → PLAN
+                plan_map = {
+                    "price_1ScJkpGznS3gtqcWsGC3ELYs": "starter",
+                    "price_1ScJlCGznS3gtqcWGFG56OBX": "pro"
+                    "price_1ScJlhGznS3gtqcWheD5Qk15": "agency"
+                }
 
-    elif email:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1", (email,))
-        row = cur.fetchone()
-        conn.close()
+                new_plan = plan_map.get(price_id, "free")
 
-        if not row:
-            return jsonify({"valid": False, "reason": "no_license_for_email"}), 404
+                if lic["plan"] != new_plan:
+                    # actualizar BD
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE licenses SET plan = ? WHERE license_key = ?",
+                        (new_plan, key)
+                    )
+                    conn.commit()
+                    conn.close()
+                    lic["plan"] = new_plan
+    except Exception as e:
+        print("Stripe sync error:", e)
 
-        license_row = dict(row)
+    # Validaciones normales
+    if lic["status"] not in ("active", "trialing"):
+        return jsonify({"valid": False, "reason": "inactive"}), 403
 
-        if license_row["status"] not in ("active", "trialing"):
-            return jsonify({"valid": False, "reason": "inactive"}), 403
-
-        try:
-            license_row["metadata"] = json.loads(license_row.get("metadata") or "{}")
-        except Exception:
-            license_row["metadata"] = {}
-
-        return jsonify({
-            "valid": True,
-            "license": {
-                "license_key": license_row["license_key"],
-                "email": license_row.get("email"),
-                "plan": license_row.get("plan"),
-                "status": license_row.get("status"),
-                "credits": license_row.get("credits"),
-                "credits_left": license_row.get("credits_left")
-            }
-        })
-
-    else:
-        return jsonify({"error": "license_key o email requerido"}), 400
+    return jsonify({
+        "valid": True,
+        "license": {
+            "license_key": lic["license_key"],
+            "plan": lic["plan"],
+            "status": lic["status"]
+        }
+    })
 
 
 @app.route("/license/redeem", methods=["POST"])
@@ -1026,6 +1009,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
