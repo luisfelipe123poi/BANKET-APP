@@ -81,7 +81,8 @@ def sign_token(email):
 
 
 def enviar_correo_verificacion(email, token):
-    link = f"http://localhost:4242/auth/verify?token={token}"
+    link = f"https://stripe-backend-r14f.onrender.com/auth/verify?token={token}"
+
 
 
     html = f"""
@@ -1212,6 +1213,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
