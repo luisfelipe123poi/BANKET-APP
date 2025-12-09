@@ -22,6 +22,17 @@ import sib_api_v3_sdk
 from sib_api_v3_sdk import Configuration, ApiClient, TransactionalEmailsApi
 from sib_api_v3_sdk.models import SendSmtpEmail
 
+import os
+import stripe
+
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+
+if not STRIPE_SECRET_KEY:
+    raise RuntimeError("❌ STRIPE_SECRET_KEY NO está definida en Render")
+
+stripe.api_key = STRIPE_SECRET_KEY
+
+
 # ======================
 # 🔐 BREVO CONFIG
 # ======================
@@ -1213,6 +1224,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
