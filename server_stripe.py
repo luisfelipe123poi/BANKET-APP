@@ -457,7 +457,8 @@ def use_credit():
         return jsonify({"ok": False, "error": "Sin créditos disponibles"}), 403
 
     # Descontar crédito
-    conn = connect_db()
+    conn = get_db_connection()
+
     cur = conn.cursor()
     cur.execute(
         "UPDATE licenses SET credits_left = credits_left - 1 WHERE license_key = ?",
@@ -933,7 +934,8 @@ def webhook():
         if existing:
             print(f"🔁 Actualizando licencia existente: {existing['license_key']}")
 
-            conn = connect_db()
+            conn = get_db_connection()
+
             cur = conn.cursor()
             cur.execute(
                 """UPDATE licenses SET 
@@ -969,9 +971,18 @@ def webhook():
     # -------------------------------------------------------
     # invoice.paid (renovación mensual)
     # -------------------------------------------------------
-    if event_type == "invoice.paid":
+    if event["type"] == "invoice.paid":
         invoice = event["data"]["object"]
-        subscription_id = invoice["subscription"]
+
+        subscription_id = invoice.get("subscription")
+
+        if not subscription_id:
+            print("⚠ invoice.paid sin campo subscription. Ignorando evento.")
+            return jsonify({"ok": True})
+
+        # continuar normalmente...
+
+
 
         print(f"🔄 Renovación pagada para subscripción {subscription_id}")
 
@@ -990,7 +1001,8 @@ def webhook():
         customer_id = invoice["customer"]
 
         # Buscar licencia de la subscripción
-        conn = connect_db()
+        conn = get_db_connection()
+
         cur = conn.cursor()
         cur.execute(
             "SELECT * FROM licenses WHERE stripe_subscription_id=?",
@@ -1220,15 +1232,3 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
-
-
-
-
-
-
-
-
-
-
-
-
