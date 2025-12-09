@@ -340,10 +340,26 @@ def request_verification():
 def create_free_license_internal(email):
     """
     Crea una licencia FREE cuando un usuario verifica su correo.
-    No es un endpoint. Se usa internamente desde /auth/verify.
+    Si ya existe una licencia (free o de pago), NO crea otra.
+    Solo devuelve la licencia existente.
     """
-    license_key = gen_license()
+    email = email.strip().lower()
 
+    # 🔍 1. Revisar si ya existe una licencia previa por email
+    existing = get_license_by_email(email)
+    if existing:
+        # → Si ya existe, NO crear una nueva
+        print(f"⚠️ Licencia ya existente encontrada para {email}: {existing['license_key']}")
+        return {
+            "ok": True,
+            "license_key": existing["license_key"],
+            "email": existing["email"],
+            "plan": existing["plan"],
+            "credits": existing.get("credits_left", existing.get("credits", 0))
+        }
+
+    # 🆕 2. Si no existe licencia, crear una nueva FREE
+    license_key = gen_license()
     credits = 10  # créditos del plan free
 
     save_license(
@@ -367,6 +383,7 @@ def create_free_license_internal(email):
         "plan": "free",
         "credits": credits
     }
+
 
 
 @app.route("/auth/verify", methods=["GET"])
@@ -1041,6 +1058,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
