@@ -697,7 +697,7 @@ def create_portal_session():
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
     data = request.get_json() or {}
-    key = data.get("license_key")
+    key = data.get("license_key") or data.get("key")
 
     if not key:
         return jsonify({"valid": False, "reason": "license_key_required"}), 400
@@ -1212,6 +1212,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
