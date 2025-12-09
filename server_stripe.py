@@ -39,7 +39,7 @@ except Exception:
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", None)
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", None)
-PUBLIC_DOMAIN = os.environ.get("PUBLIC_DOMAIN", "http://localhost:4242")
+PUBLIC_DOMAIN = os.environ.get("PUBLIC_DOMAIN", "https://stripe-backend-r14f.onrender.com")
 
 if not STRIPE_SECRET_KEY:
     raise RuntimeError("Necesitas establecer STRIPE_SECRET_KEY en tus variables de entorno.")
@@ -890,7 +890,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "http://localhost:4242/static/anuncios/banner.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/banner.png",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -904,23 +904,23 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "http://localhost:4242/static/anuncios/ad1.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad1.png",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
-            "image": "http://localhost:4242/static/anuncios/ad2.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad2.png",
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "http://localhost:4242/static/anuncios/ad3.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad3.png",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "http://localhost:4242/static/anuncios/ad4.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad4.png",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "http://localhost:4242/static/anuncios/ad5.png",
+            "image": "https://stripe-backend-r14f.onrender.com/static/anuncios/ad5.png",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -994,3 +994,4 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
