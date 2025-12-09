@@ -657,7 +657,7 @@ def redeem_license():
     data = request.get_json() or {}
     cust = data.get("stripe_customer_id")
     sub = data.get("stripe_subscription_id")
-    email = data.get("email")
+    email = (data.get("email") or "").strip().lower()
     plan = data.get("plan", "pro")
     expires = data.get("expires_at")
     credits = data.get("credits", None)
@@ -665,7 +665,6 @@ def redeem_license():
     if not (cust and sub and email):
         return jsonify({"error": "stripe_customer_id, stripe_subscription_id y email son requeridos"}), 400
 
-    license_key = gen_license()
     status = "active"
     expires_dt = None
     if expires:
@@ -674,13 +673,67 @@ def redeem_license():
         except Exception:
             expires_dt = None
 
-    # If credits not provided, pick default by plan
+    # Normalizar plan
     plan_key = plan.lower().split("_")[0]
+
+    # Si no vienen créditos, usar defaults
     if credits is None:
         credits = PLAN_DEFAULT_CREDITS.get(plan_key, 100)
 
-    save_license(license_key, cust, sub, email, plan_key, status, expires_dt, metadata={"created_via": "webhook"}, credits=credits)
-    return jsonify({"license_key": license_key})
+    # 🔍 Buscar licencia existente por email
+    existing = get_license_by_email(email)
+
+    if existing:
+        # ✅ ACTUALIZAR licencia existente
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE licenses 
+            SET 
+                stripe_customer_id = ?,
+                stripe_subscription_id = ?,
+                plan = ?,
+                status = ?,
+                expires_at = ?,
+                credits = ?,
+                credits_left = ?
+            WHERE email = ?
+        """, (
+            cust,
+            sub,
+            plan_key,
+            status,
+            expires_dt.isoformat() if expires_dt else None,
+            credits,
+            credits,
+            email
+        ))
+        conn.commit()
+        conn.close()
+
+        license_key = existing["license_key"]
+
+    else:
+        # 🆕 Crear licencia solo si no existe
+        license_key = gen_license()
+        save_license(
+            license_key,
+            cust,
+            sub,
+            email,
+            plan_key,
+            status,
+            expires_dt,
+            metadata={"created_via": "webhook"},
+            credits=credits
+        )
+
+    return jsonify({
+        "ok": True,
+        "license_key": license_key,
+        "plan": plan_key,
+        "email": email
+    })
 
 # -------------------------
 # Usage endpoint: decrement credits atomically
@@ -1010,6 +1063,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
