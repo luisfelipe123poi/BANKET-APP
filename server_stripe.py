@@ -710,7 +710,6 @@ def validate_license():
     data = request.get_json() or {}
     key = data.get("license_key") or data.get("key")
 
-
     if not key:
         return jsonify({"valid": False, "reason": "license_key_required"}), 400
 
@@ -718,13 +717,9 @@ def validate_license():
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
 
-    # --- 🔁 FORZAR SYNC CON STRIPE ---
-    try:
-        import stripe
-        stripe.api_key = STRIPE_SECRET_KEY
-
-
-        if lic.get("stripe_customer_id"):
+    # 🔁 SYNC PLAN CON STRIPE (SI TIENE CUSTOMER)
+    if lic.get("stripe_customer_id"):
+        try:
             subs = stripe.Subscription.list(
                 customer=lic["stripe_customer_id"],
                 status="all",
@@ -735,7 +730,6 @@ def validate_license():
                 sub = subs.data[0]
                 price_id = sub["items"]["data"][0]["price"]["id"]
 
-                # MAPEAR PRICE_ID → PLAN
                 plan_map = {
                     "price_1ScJkpGznS3gtqcWsGC3ELYs": "starter",
                     "price_1ScJlCGznS3gtqcWGFG56OBX": "pro",
@@ -744,8 +738,7 @@ def validate_license():
 
                 new_plan = plan_map.get(price_id, "free")
 
-                if lic["plan"] != new_plan:
-                    # actualizar BD
+                if lic.get("plan") != new_plan:
                     conn = get_db_connection()
                     cur = conn.cursor()
                     cur.execute(
@@ -755,21 +748,23 @@ def validate_license():
                     conn.commit()
                     conn.close()
                     lic["plan"] = new_plan
-    except Exception as e:
-        print("Stripe sync error:", e)
 
-    # Validaciones normales
-    if lic["status"] not in ("active", "trialing"):
+        except Exception as e:
+            print("⚠️ Stripe sync error:", e)
+
+    # ✅ LICENCIA ACTIVA AUNQUE NO TENGA CRÉDITOS
+    if lic.get("status") not in ("active", "trialing"):
         return jsonify({"valid": False, "reason": "inactive"}), 403
 
     return jsonify({
         "valid": True,
         "license": {
             "license_key": lic["license_key"],
-            "plan": lic["plan"],
+            "plan": lic.get("plan", "free"),
             "status": lic["status"]
         }
     })
+
 
 
 @app.route("/license/redeem", methods=["POST"])
@@ -1224,6 +1219,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
