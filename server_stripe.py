@@ -617,7 +617,7 @@ def validate_license():
                 # MAPEAR PRICE_ID → PLAN
                 plan_map = {
                     "price_1ScJkpGznS3gtqcWsGC3ELYs": "starter",
-                    "price_1ScJlCGznS3gtqcWGFG56OBX": "pro"
+                    "price_1ScJlCGznS3gtqcWGFG56OBX": "pro",
                     "price_1ScJlhGznS3gtqcWheD5Qk15": "agency"
                 }
 
@@ -1009,6 +1009,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
