@@ -707,19 +707,31 @@ def create_portal_session():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def get_license_by_email(email):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM licenses WHERE email = ?", (email,))
+    row = cur.fetchone()
+    conn.close()
+    return row
+
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
     data = request.get_json() or {}
+
+    # 🔹 ACEPTAR VALIDACIÓN POR EMAIL O POR LICENSE_KEY
     key = data.get("license_key") or data.get("key")
+    email = data.get("email")
 
-    if not key:
-        return jsonify({"valid": False, "reason": "license_key_required"}), 400
+    if email and not key:
+        lic = get_license_by_email(email)
+    else:
+        lic = get_license_by_key(key)
 
-    lic = get_license_by_key(key)
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
 
-    # 🔁 SYNC PLAN CON STRIPE (SI TIENE CUSTOMER)
+    # 🔁 SINCRONIZAR PLAN CON STRIPE SI TIENE CUSTOMER
     if lic.get("stripe_customer_id"):
         try:
             subs = stripe.Subscription.list(
@@ -740,12 +752,13 @@ def validate_license():
 
                 new_plan = plan_map.get(price_id, "free")
 
+                # Actualiza si el plan cambió
                 if lic.get("plan") != new_plan:
                     conn = get_db_connection()
                     cur = conn.cursor()
                     cur.execute(
                         "UPDATE licenses SET plan = ? WHERE license_key = ?",
-                        (new_plan, key)
+                        (new_plan, lic["license_key"])
                     )
                     conn.commit()
                     conn.close()
@@ -754,16 +767,19 @@ def validate_license():
         except Exception as e:
             print("⚠️ Stripe sync error:", e)
 
-    # ✅ LICENCIA ACTIVA AUNQUE NO TENGA CRÉDITOS
+    # ❌ SI LA LICENCIA ESTÁ INACTIVA
     if lic.get("status") not in ("active", "trialing"):
         return jsonify({"valid": False, "reason": "inactive"}), 403
 
+    # ✅ RESPUESTA COMPLETA PARA TU APP
     return jsonify({
         "valid": True,
         "license": {
             "license_key": lic["license_key"],
+            "email": lic.get("email"),
             "plan": lic.get("plan", "free"),
-            "status": lic["status"]
+            "status": lic.get("status"),
+            "credits_left": lic.get("credits_left", 0)
         }
     })
 
