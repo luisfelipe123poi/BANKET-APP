@@ -407,26 +407,6 @@ def verify_code():
     # Crear o reutilizar licencia FREE
     return jsonify(create_free_license_internal(email))
 
-@app.route("/license/validate", methods=["POST"])
-def validate_license():
-    data = request.json
-    key = data.get("license_key")
-
-    if not key:
-        return jsonify({"ok": False, "error": "license_key requerido"}), 400
-
-    lic = get_license_by_key(key)
-    if not lic:
-        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
-
-    return jsonify({
-        "ok": True,
-        "email": lic["email"],
-        "plan": lic["plan"],
-        "credits": lic["credits_left"],
-        "status": lic["status"],
-        "expires_at": lic["expires_at"],
-    })
 
 @app.route("/license/info", methods=["GET"])
 def license_info():
