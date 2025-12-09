@@ -17,7 +17,7 @@ import time
 from sib_api_v3_sdk import Configuration, ApiClient, TransactionalEmailsApi
 from sib_api_v3_sdk.models import SendSmtpEmail
 
-BREVO_API_KEY = "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"
+BREVO_API_KEY = "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"
 BREVO_SENDER_EMAIL = "turboclipsapp@gmail.com"
 BREVO_SENDER_NAME = "TurboClips"
 
@@ -1212,6 +1212,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
