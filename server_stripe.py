@@ -1245,6 +1245,4 @@ def cancel():
     })
 
 
-if __name__ == "__main__":
-    print("Server starting on port 4242")
-    app.run(host="0.0.0.0", port=4242, debug=True)
+
