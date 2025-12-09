@@ -638,28 +638,22 @@ def create_checkout_session():
     email = None
     plan = "pro"
 
-    # Soporta GET (query params)
     if request.method == "GET":
         price_id = request.args.get("price_id")
         email = request.args.get("email")
         plan = request.args.get("plan", "pro")
 
-    # Soporta POST (JSON)
     elif request.method == "POST":
         data = request.get_json(silent=True) or {}
         price_id = data.get("price_id")
         email = data.get("email")
         plan = data.get("plan", "pro")
 
-    # Fallback si no envían price_id
     if not price_id:
         price_id = PRICE_ID_PRO
 
-    if not price_id:
-        return jsonify({"error": "price_id no configurado."}), 400
-
     if not email:
-        return jsonify({"error": "Se requiere email."}), 400
+        return jsonify({"ok": False, "error": "Se requiere email."}), 400
 
     try:
         customers = stripe.Customer.list(email=email, limit=1)
@@ -678,11 +672,12 @@ def create_checkout_session():
             metadata={"email": email, "plan": plan}
         )
 
-        # ✅ Redirección automática a Stripe
-        return redirect(session.url)
+        #  🔥 CORRECTO → devolver JSON con la URL
+        return jsonify({"ok": True, "url": session.url})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route("/portal-session", methods=["POST"])
 def create_portal_session():
@@ -1218,6 +1213,7 @@ def cancel():
 if __name__ == "__main__":
     print("Server starting on port 4242")
     app.run(host="0.0.0.0", port=4242, debug=True)
+
 
 
 
