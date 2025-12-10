@@ -325,6 +325,13 @@ def get_license_by_key(key):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM licenses WHERE license_key = ?", (key,))
+    lic = cur.fetchone()
+
+    if lic:
+        lic = dict(lic)
+
+    return lic
+
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None
@@ -583,12 +590,18 @@ def verify():
     # 🔥 3. SI YA EXISTE LICENCIA → NO CREAR OTRA
     existing = get_license_by_email(email)
     if existing:
+        # existing viene de get_license_by_email()
+        # pero si por alguna razón NO está convertido, forzamos conversión
+        if existing and not isinstance(existing, dict):
+            existing = dict(existing)
+
         return jsonify({
             "ok": True,
             "message": "Correo ya verificado anteriormente",
             "email": email,
             "license": existing
         })
+
 
     # 🔥 4. SOLO si NO existe licencia → crear FREE
     new_license = create_free_license_internal(email)
@@ -613,7 +626,8 @@ def check_status():
         "ok": True,
         "verified": True,
         "license": lic,
-        "credits": lic.get("credits_left", 0)
+        "credits": lic["credits_left"] if "credits_left" in lic.keys() else 0
+
     })
 
 
@@ -654,17 +668,27 @@ def get_license_by_email(email):
     """
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1", (email,))
-    row = cur.fetchone()
+
+    cur.execute(
+        "SELECT * FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1",
+        (email,)
+    )
+
+    row = cur.fetchone()   # <-- obtenemos SOLO una fila, la más reciente
     conn.close()
+
     if not row:
         return None
-    d = dict(row)
+
+    lic = dict(row)        # <-- convertimos sqlite.Row -> dict
+
+    # Cargar metadata
     try:
-        d["metadata"] = json.loads(d.get("metadata") or "{}")
+        lic["metadata"] = json.loads(lic.get("metadata") or "{}")
     except Exception:
-        d["metadata"] = d.get("metadata")
-    return d
+        lic["metadata"] = lic.get("metadata")
+
+    return lic
 
 def get_license_by_ip(ip):
     """
