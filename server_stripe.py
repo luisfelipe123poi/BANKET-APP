@@ -555,7 +555,7 @@ def verify():
 def check_status():
     email = request.args.get("email")
     if not email:
-        return jsonify({"error": "email requerido"}), 400
+        return jsonify({"verified": False, "reason": "email_required"}), 400
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -563,18 +563,24 @@ def check_status():
     row = cur.fetchone()
     conn.close()
 
+    # Si NO existe la licencia → devolver JSON válido
     if not row:
-        return jsonify({"verified": False})
+        return jsonify({
+            "verified": False,
+            "license": None
+        }), 200
 
+    # Si existe → devolver JSON con licencia completa
     return jsonify({
         "verified": True,
         "license": {
             "email": row["email"],
             "plan": row["plan"],
             "status": row["status"],
-            "license_key": row["license_key"]
+            "license_key": row["license_key"],
+            "credits_left": row.get("credits_left", 0)
         }
-    })
+    }), 200
 
 
 
@@ -1254,6 +1260,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
