@@ -335,7 +335,7 @@ def request_verification():
             "ok": True,
             "already_verified": True,
             "message": "Este correo ya fue verificado.",
-            "license": existing
+            "license": dict(existing) if existing else None
         })
 
     # Enviar token SOLO si NO existe licencia
@@ -1260,6 +1260,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
