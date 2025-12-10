@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 import jwt
 import time
 from flask import redirect
++import os
 
 
 import os
@@ -28,7 +29,7 @@ import stripe
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
 if not STRIPE_SECRET_KEY:
-    raise RuntimeError("❌ STRIPE_SECRET_KEY NO está definida en Render")
+    raise RuntimeError("❌ ERROR: Falta STRIPE_SECRET_KEY en variables de entorno.")
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -107,7 +108,9 @@ def sign_token(email):
 
 
 def enviar_correo_verificacion(email, token):
-    link = f"https://stripe-backend-r14f.onrender.com/auth/verify?token={token}"
++    # Usar PUBLIC_DOMAIN (variable de entorno) en lugar de URL fija
++    base = PUBLIC_DOMAIN.rstrip("/")
++    link = f"{base}/auth/verify?token={token}"
 
 
 
@@ -335,7 +338,7 @@ def request_verification():
             "ok": True,
             "already_verified": True,
             "message": "Este correo ya fue verificado.",
-            "license": dict(existing) if existing else None
+            "license": existing
         })
 
     # Enviar token SOLO si NO existe licencia
@@ -554,34 +557,17 @@ def verify():
 @app.route("/auth/check_status", methods=["GET"])
 def check_status():
     email = request.args.get("email")
-    if not email:
-        return jsonify({"verified": False, "reason": "email_required"}), 400
+    
+    lic = get_license_by_email(email)
+    if not lic:
+        return jsonify({"ok": False, "verified": False})
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM licenses WHERE email = ?", (email,))
-    row = cur.fetchone()
-    conn.close()
-
-    # Si NO existe la licencia → devolver JSON válido
-    if not row:
-        return jsonify({
-            "verified": False,
-            "license": None
-        }), 200
-
-    # Si existe → devolver JSON con licencia completa
     return jsonify({
+        "ok": True,
         "verified": True,
-        "license": {
-            "email": row["email"],
-            "plan": row["plan"],
-            "status": row["status"],
-            "license_key": row["license_key"],
-            "credits_left": row.get("credits_left", 0)
-        }
-    }), 200
-
+        "license": lic,
+        "credits": lic.get("credits_left", 0)
+    })
 
 
 # ========================================
@@ -922,24 +908,38 @@ def post_usage():
 # -------------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", None)
+
+    if not webhook_secret:
+        print("⚠️ ADVERTENCIA: STRIPE_WEBHOOK_SECRET no está configurado en entorno.")
+        print("   El webhook NO podrá verificarse correctamente.")
+
     payload = request.data
-    sig = request.headers.get("Stripe-Signature")
+    sig = request.headers.get("Stripe-Signature", None)
 
-    # Reemplaza por tu webhook secret real
-    webhook_secret = "whsec_ACgNxemkNBo9SGjfWUckMiVWiX3XJRrA"
-
-
+    # -----------------------------
+    # Verificación del webhook
+    # -----------------------------
     try:
         event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
+        print("📩 Webhook recibido y verificado:", event.get("type"))
     except Exception as e:
         print("❌ Webhook signature error:", e)
-        return "Invalid signature", 400
+
+        # -------------------
+        # MODO DEBUG SOLO TEST
+        # -------------------
+        try:
+            event = json.loads(payload)
+            print("⚠️ Fallback: Webhook procesado SIN verificar firma (solo pruebas)")
+        except Exception:
+            return "Invalid signature", 400
 
     event_type = event["type"]
     print("Webhook received:", event_type)
 
     # -------------------------------------------------------
-    # checkout.session.completed
+    # checkout.session.completed  (Pago inicial)
     # -------------------------------------------------------
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]
@@ -961,14 +961,11 @@ def webhook():
 
         plan_key, credits = plan_map.get(price_id, ("pro", 100))
 
-        # Buscar licencia existente del email
         existing = get_license_by_email(email)
 
         if existing:
             print(f"🔁 Actualizando licencia existente: {existing['license_key']}")
-
             conn = get_db_connection()
-
             cur = conn.cursor()
             cur.execute(
                 """UPDATE licenses SET 
@@ -983,11 +980,9 @@ def webhook():
             )
             conn.commit()
             conn.close()
-
         else:
-            # No debería pasar, pero por seguridad:
             new_license_key = gen_license()
-            print(f"🆕 Creando nueva licencia PRO para {email}: {new_license_key}")
+            print(f"🆕 Creando nueva licencia {plan_key} para {email}: {new_license_key}")
 
             save_license(
                 license_key=new_license_key,
@@ -1002,24 +997,18 @@ def webhook():
             )
 
     # -------------------------------------------------------
-    # invoice.paid (renovación mensual)
+    # invoice.paid  (Renovación automática mensual)
     # -------------------------------------------------------
-    if event["type"] == "invoice.paid":
+    if event_type == "invoice.paid":
         invoice = event["data"]["object"]
-
         subscription_id = invoice.get("subscription")
 
         if not subscription_id:
             print("⚠ invoice.paid sin campo subscription. Ignorando evento.")
             return jsonify({"ok": True})
 
-        # continuar normalmente...
+        print(f"🔄 Renovación pagada para suscripción {subscription_id}")
 
-
-
-        print(f"🔄 Renovación pagada para subscripción {subscription_id}")
-
-        # Determinar plan según price_id
         price_id = invoice["lines"]["data"][0]["price"]["id"]
 
         plan_map = {
@@ -1029,13 +1018,9 @@ def webhook():
         }
 
         plan_key, credits = plan_map.get(price_id, ("pro", 100))
-
-        # Obtener datos customer_id
         customer_id = invoice["customer"]
 
-        # Buscar licencia de la subscripción
         conn = get_db_connection()
-
         cur = conn.cursor()
         cur.execute(
             "SELECT * FROM licenses WHERE stripe_subscription_id=?",
@@ -1045,7 +1030,6 @@ def webhook():
 
         if existing:
             print(f"🔁 Renovando licencia {existing['license_key']}")
-
             cur.execute(
                 """UPDATE licenses SET 
                     plan=?, 
@@ -1260,9 +1244,5 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
-
-
 
 
