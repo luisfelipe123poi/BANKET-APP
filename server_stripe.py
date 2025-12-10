@@ -78,10 +78,10 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "stripe_licenses.db")
 PRICE_ID_PRO = ("price_1ScJlCGznS3gtqcWGFG56OBX")
 PRICE_ID_STARTER = ("price_1ScJkpGznS3gtqcWsGC3ELYs")
 PRICE_ID_AGENCY = ("price_1ScJlhGznS3gtqcWheD5Qk15")
-PRICE_ID_STARTER_ANNUAL = os.environ.get("PRICE_ID_STARTER_ANNUAL", "")
-PRICE_ID_PRO_ANNUAL = os.environ.get("PRICE_ID_PRO_ANNUAL", "")
-PRICE_ID_AGENCY_ANNUAL = os.environ.get("PRICE_ID_AGENCY_ANNUAL", "")
-
+# Precios anuales
+PRICE_ID_STARTER_ANNUAL = "price_xxxxx_starter_year"
+PRICE_ID_PRO_ANNUAL = "price_xxxxx_pro_year"
+PRICE_ID_AGENCY_ANNUAL = "price_xxxxx_agency_year"
 # Mapping default credits by plan key (fallback)
 PLAN_DEFAULT_CREDITS = {
     "starter": 100,
@@ -719,7 +719,7 @@ def get_license_by_email(email):
 def validate_license():
     data = request.get_json() or {}
 
-    # 🔹 ACEPTAR VALIDACIÓN POR EMAIL O POR LICENSE_KEY
+    # Permitir validar por license_key o email
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
 
@@ -731,7 +731,7 @@ def validate_license():
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
 
-    # 🔁 SINCRONIZAR PLAN CON STRIPE SI TIENE CUSTOMER
+    # Intentar sincronizar con Stripe
     if lic.get("stripe_customer_id"):
         try:
             subs = stripe.Subscription.list(
@@ -743,35 +743,52 @@ def validate_license():
             if subs.data:
                 sub = subs.data[0]
                 price_id = sub["items"]["data"][0]["price"]["id"]
+                status = sub["status"]
 
+                # MAPEO COMPLETO (incluye ANUALES)
                 plan_map = {
-                    "price_1ScJkpGznS3gtqcWsGC3ELYs": "starter",
-                    "price_1ScJlCGznS3gtqcWGFG56OBX": "pro",
-                    "price_1ScJlhGznS3gtqcWheD5Qk15": "agency"
+                    PRICE_ID_STARTER: "starter",
+                    PRICE_ID_PRO: "pro",
+                    PRICE_ID_AGENCY: "agency",
+                    PRICE_ID_STARTER_ANNUAL: "starter",
+                    PRICE_ID_PRO_ANNUAL: "pro",
+                    PRICE_ID_AGENCY_ANNUAL: "agency"
                 }
 
-                new_plan = plan_map.get(price_id, "free")
+                new_plan = plan_map.get(price_id, lic["plan"])
 
-                # Actualiza si el plan cambió
-                if lic.get("plan") != new_plan:
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(
-                        "UPDATE licenses SET plan = ? WHERE license_key = ?",
-                        (new_plan, lic["license_key"])
-                    )
-                    conn.commit()
-                    conn.close()
-                    lic["plan"] = new_plan
+                credits_map = {
+                    "starter": 100,
+                    "pro": 300,
+                    "agency": 1200,
+                    "free": 10
+                }
+
+                new_credits = credits_map[new_plan]
+
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE licenses SET 
+                        plan=?, 
+                        credits=?, 
+                        credits_left=?, 
+                        status=?
+                    WHERE license_key=?
+                """, (new_plan, new_credits, new_credits, status, lic["license_key"]))
+                conn.commit()
+                conn.close()
+
+                # actualizar licencia en memoria
+                lic["plan"] = new_plan
+                lic["credits"] = new_credits
+                lic["credits_left"] = new_credits
+                lic["status"] = status
 
         except Exception as e:
             print("⚠️ Stripe sync error:", e)
 
-    # ❌ SI LA LICENCIA ESTÁ INACTIVA
-    if lic.get("status") not in ("active", "trialing"):
-        return jsonify({"valid": False, "reason": "inactive"}), 403
-
-    # ✅ RESPUESTA COMPLETA PARA TU APP
+    # Devolver datos completos
     return jsonify({
         "valid": True,
         "license": {
@@ -779,9 +796,11 @@ def validate_license():
             "email": lic.get("email"),
             "plan": lic.get("plan", "free"),
             "status": lic.get("status"),
+            "credits": lic.get("credits", 0),          # <-- NUEVO
             "credits_left": lic.get("credits_left", 0)
         }
     })
+
 
 
 
@@ -907,139 +926,109 @@ def post_usage():
 def webhook():
     payload = request.data
     sig = request.headers.get("Stripe-Signature")
-
-    # Reemplaza por tu webhook secret real
     webhook_secret = "whsec_ACgNxemkNBo9SGjfWUckMiVWiX3XJRrA"
-
 
     try:
         event = stripe.Webhook.construct_event(payload, sig, webhook_secret)
     except Exception as e:
-        print("❌ Webhook signature error:", e)
-        return "Invalid signature", 400
+        print("❌ Error webhook:", e)
+        return "Invalid", 400
 
     event_type = event["type"]
-    print("Webhook received:", event_type)
+    data = event["data"]["object"]
 
-    # -------------------------------------------------------
-    # checkout.session.completed
-    # -------------------------------------------------------
+    print("🔔 Webhook recibido:", event_type)
+
+    # -------------------------
+    # MAPEO PLANES COMPLETO
+    # -------------------------
+    plan_map = {
+        PRICE_ID_STARTER: "starter",
+        PRICE_ID_PRO: "pro",
+        PRICE_ID_AGENCY: "agency",
+
+        PRICE_ID_STARTER_ANNUAL: "starter",
+        PRICE_ID_PRO_ANNUAL: "pro",
+        PRICE_ID_AGENCY_ANNUAL: "agency",
+    }
+
+    credits_map = {
+        "starter": 100,
+        "pro": 300,
+        "agency": 1200,
+        "free": 10,
+    }
+
+
+    # ============================================================
+    # 1) CHECKOUT COMPLETED → Primera compra
+    # ============================================================
     if event_type == "checkout.session.completed":
-        session = event["data"]["object"]
-        email = session["customer_details"]["email"]
-        subscription_id = session["subscription"]
-        customer_id = session["customer"]
+        email = data["customer_details"]["email"]
+        subscription_id = data["subscription"]
+        customer_id = data["customer"]
 
-        print(f"🔔 Checkout completado para {email}")
-
-        # Mapear price -> plan
-        line_items = stripe.checkout.Session.list_line_items(session["id"])
+        line_items = stripe.checkout.Session.list_line_items(data["id"])
         price_id = line_items.data[0].price.id
 
-        plan_map = {
-            "price_1ScJkpGznS3gtqcWsGC3ELYs": ("pro", 100),
-            "price_1ScJlCGznS3gtqcWGFG56OBX": ("starter", 30),
-            "price_1ScJlUGznS3gtqcWSlvrLQcI": ("agency", 300),
-        }
+        plan = plan_map.get(price_id, "starter")
+        credits = credits_map[plan]
 
-        plan_key, credits = plan_map.get(price_id, ("pro", 100))
+        print(f"🆕 Nueva compra {email} → {plan}")
 
-        # Buscar licencia existente del email
         existing = get_license_by_email(email)
 
-        if existing:
-            print(f"🔁 Actualizando licencia existente: {existing['license_key']}")
-
-            conn = get_db_connection()
-
-            cur = conn.cursor()
-            cur.execute(
-                """UPDATE licenses SET 
-                    plan=?, 
-                    stripe_customer_id=?, 
-                    stripe_subscription_id=?,
-                    credits=?, 
-                    credits_left=?, 
-                    status='active'
-                WHERE email=?""",
-                (plan_key, customer_id, subscription_id, credits, credits, email),
-            )
-            conn.commit()
-            conn.close()
-
-        else:
-            # No debería pasar, pero por seguridad:
-            new_license_key = gen_license()
-            print(f"🆕 Creando nueva licencia PRO para {email}: {new_license_key}")
-
-            save_license(
-                license_key=new_license_key,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                email=email,
-                plan=plan_key,
-                status="active",
-                expires_at=None,
-                metadata={"source": "stripe"},
-                credits=credits,
-            )
-
-    # -------------------------------------------------------
-    # invoice.paid (renovación mensual)
-    # -------------------------------------------------------
-    if event["type"] == "invoice.paid":
-        invoice = event["data"]["object"]
-
-        subscription_id = invoice.get("subscription")
-
-        if not subscription_id:
-            print("⚠ invoice.paid sin campo subscription. Ignorando evento.")
-            return jsonify({"ok": True})
-
-        # continuar normalmente...
-
-
-
-        print(f"🔄 Renovación pagada para subscripción {subscription_id}")
-
-        # Determinar plan según price_id
-        price_id = invoice["lines"]["data"][0]["price"]["id"]
-
-        plan_map = {
-            "price_1ScJkpGznS3gtqcWsGC3ELYs": ("pro", 100),
-            "price_1ScJlCGznS3gtqcWGFG56OBX": ("starter", 30),
-            "price_1ScJlUGznS3gtqcWSlvrLQcI": ("agency", 300),
-        }
-
-        plan_key, credits = plan_map.get(price_id, ("pro", 100))
-
-        # Obtener datos customer_id
-        customer_id = invoice["customer"]
-
-        # Buscar licencia de la subscripción
         conn = get_db_connection()
-
         cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM licenses WHERE stripe_subscription_id=?",
-            (subscription_id,),
-        )
-        existing = cur.fetchone()
 
         if existing:
-            print(f"🔁 Renovando licencia {existing['license_key']}")
-
-            cur.execute(
-                """UPDATE licenses SET 
+            cur.execute("""
+                UPDATE licenses SET 
                     plan=?, 
                     credits=?, 
                     credits_left=?, 
-                    status='active'
-                WHERE stripe_subscription_id=?""",
-                (plan_key, credits, credits, subscription_id),
+                    status='active',
+                    stripe_customer_id=?,
+                    stripe_subscription_id=?
+                WHERE email=?
+            """, (plan, credits, credits, customer_id, subscription_id, email))
+        else:
+            new_key = gen_license()
+            save_license(
+                license_key=new_key,
+                email=email,
+                plan=plan,
+                credits=credits,
+                credits_left=credits,
+                status="active",
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id
             )
-            conn.commit()
 
+        conn.commit()
+        conn.close()
+
+    # ============================================================
+    # 2) invoice.paid → Renovación o cambio de plan
+    # ============================================================
+    if event_type == "invoice.paid":
+        subscription_id = data["subscription"]
+        email = stripe.Customer.retrieve(data["customer"]).email
+
+        price_id = data["lines"]["data"][0]["price"]["id"]
+        plan = plan_map.get(price_id, "starter")
+        credits = credits_map[plan]
+
+        cur.execute("""
+            UPDATE licenses SET
+                plan=?,
+                credits=?, 
+                credits_left=?,     -- 🔥 RESETEO AQUÍ
+                status='active'
+            WHERE email=?
+        """, (plan, credits, credits, email))
+
+        conn.commit()
         conn.close()
 
     return jsonify({"received": True})
