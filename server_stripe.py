@@ -164,6 +164,56 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
+def save_license(
+    license_key,
+    email,
+    plan="free",
+    credits=0,
+    stripe_customer_id=None,
+    stripe_subscription_id=None,
+    status="active",
+    expires_at=None,
+    metadata=None
+):
+    """
+    Guarda una licencia nueva en la base de datos.
+    Si ya existe el email o license_key, la sobrescribe automáticamente.
+    """
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT OR REPLACE INTO licenses (
+            license_key,
+            email,
+            plan,
+            credits,
+            credits_left,
+            status,
+            stripe_customer_id,
+            stripe_subscription_id,
+            expires_at,
+            metadata,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    """, (
+        license_key,
+        email,
+        plan,
+        credits,
+        credits,               # credits_left inicia igual
+        status,
+        stripe_customer_id,
+        stripe_subscription_id,
+        expires_at,
+        json.dumps(metadata or {})
+    ))
+
+    conn.commit()
+    conn.close()
 
 
 def init_db():
@@ -869,16 +919,15 @@ def redeem_license():
         # 🆕 Crear licencia solo si no existe
         license_key = gen_license()
         save_license(
-            license_key,
-            cust,
-            sub,
-            email,
-            plan_key,
-            status,
-            expires_dt,
-            metadata={"created_via": "webhook"},
-            credits=credits
+            license_key=new_key,
+            email=email,
+            plan=plan_key,
+            credits=credits,
+            stripe_customer_id=customer_id,
+            stripe_subscription_id=subscription_id,
+            status="active",
         )
+
 
     return jsonify({
         "ok": True,
@@ -965,7 +1014,8 @@ def webhook():
     # ============================================================
     if event_type == "checkout.session.completed":
         email = data["customer_details"]["email"]
-        subscription_id = data["subscription"]
+        subscription_id = data.get("id")
+
         customer_id = data["customer"]
 
         line_items = stripe.checkout.Session.list_line_items(data["id"])
