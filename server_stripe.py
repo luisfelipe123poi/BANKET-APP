@@ -554,17 +554,28 @@ def verify():
 @app.route("/auth/check_status", methods=["GET"])
 def check_status():
     email = request.args.get("email")
-    
-    lic = get_license_by_email(email)
-    if not lic:
-        return jsonify({"ok": False, "verified": False})
+    if not email:
+        return jsonify({"error": "email requerido"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM licenses WHERE email = ?", (email,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"verified": False})
 
     return jsonify({
-        "ok": True,
         "verified": True,
-        "license": lic,
-        "credits": lic.get("credits_left", 0)
+        "license": {
+            "email": row["email"],
+            "plan": row["plan"],
+            "status": row["status"],
+            "license_key": row["license_key"]
+        }
     })
+
 
 
 # ========================================
@@ -1243,6 +1254,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
