@@ -629,7 +629,12 @@ def verify():
             "license": existing
         })
 
-    # Si NO existe licencia → crear FREE automáticamente
+    # ---------------------------------------------------------
+    # SI NO EXISTE LICENCIA → CREAR LICENCIA FREE CON 30 DÍAS
+    # ---------------------------------------------------------
+    from datetime import datetime, timedelta
+    expires_at = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d")
+
     new_key = gen_license()
     save_license(
         license_key=new_key,
@@ -637,7 +642,8 @@ def verify():
         plan="free",
         credits=10,
         credits_left=10,
-        status="active"
+        status="active",
+        expires_at=expires_at   # ← AGREGADO
     )
 
     lic = get_license_by_email(email)
@@ -1389,6 +1395,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
