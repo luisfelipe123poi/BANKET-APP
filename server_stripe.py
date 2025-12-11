@@ -658,26 +658,32 @@ def check_status():
     if not email:
         return jsonify({"ok": False, "error": "Email requerido"}), 400
 
+    email = email.strip().lower()
+
+    # Verificar si el email ya fue confirmado
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT used FROM email_verification_tokens WHERE email = ?", (email,))
+    row = cur.fetchone()
+    conn.close()
+
+    verified = False
+    if row and row["used"] == 1:
+        verified = True
+
+    # Buscar la licencia
     lic = get_license_by_email(email)
-
-    # Si no existe ninguna licencia
-    if not lic:
-        return jsonify({"ok": False, "verified": False})
-
-    # Convertir Row → dict
-    if not isinstance(lic, dict):
-        lic = dict(lic)
 
     return jsonify({
         "ok": True,
-        "verified": True if lic.get("verified_email") else False,
+        "verified": verified,
         "email": email,
         "license": {
-            "license_key": lic.get("license_key"),
-            "plan": lic.get("plan"),
-            "credits": lic.get("credits"),
-            "credits_left": lic.get("credits_left"),
-            "status": lic.get("status"),
+            "license_key": lic.get("license_key") if lic else None,
+            "plan": lic.get("plan") if lic else None,
+            "credits": lic.get("credits") if lic else None,
+            "credits_left": lic.get("credits_left") if lic else None,
+            "status": lic.get("status") if lic else None
         }
     })
 
