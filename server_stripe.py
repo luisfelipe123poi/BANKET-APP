@@ -171,11 +171,13 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
+
 def save_license(
     license_key,
     email,
     plan="free",
     credits=0,
+    credits_left=None,
     stripe_customer_id=None,
     stripe_subscription_id=None,
     status="active",
@@ -186,6 +188,10 @@ def save_license(
     Guarda una licencia nueva en la base de datos.
     Si ya existe el email o license_key, la sobrescribe automáticamente.
     """
+
+    # Si no viene credits_left → iniciar igual a credits
+    if credits_left is None:
+        credits_left = credits
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -211,7 +217,7 @@ def save_license(
         email,
         plan,
         credits,
-        credits,               # credits_left inicia igual
+        credits_left,
         status,
         stripe_customer_id,
         stripe_subscription_id,
