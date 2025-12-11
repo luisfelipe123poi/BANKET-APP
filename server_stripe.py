@@ -596,6 +596,8 @@ def verify():
     # Si ya fue usado antes → correo ya verificado
     if used:
         existing = get_license_by_email(email)
+
+        # Convertir Row → dict
         if existing and not isinstance(existing, dict):
             existing = dict(existing)
 
@@ -627,20 +629,15 @@ def verify():
             "license": existing
         })
 
-    # -------------------------------------------------------
-    # CREAR LICENCIA FREE CON EXPIRACIÓN DE 30 DÍAS
-    # -------------------------------------------------------
+    # Si NO existe licencia → crear FREE automáticamente
     new_key = gen_license()
-    expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
-
     save_license(
         license_key=new_key,
         email=email,
         plan="free",
         credits=10,
         credits_left=10,
-        status="active",
-        expires_at=expires_at
+        status="active"
     )
 
     lic = get_license_by_email(email)
@@ -1092,18 +1089,16 @@ def webhook():
     print("🔔 Webhook recibido:", event_type)
 
     # -------------------------
-    # MAPEO PLANES
+    # MAPEO PLANES COMPLETO
     # -------------------------
     plan_map = {
-        # Mensuales
-        PRICE_ID_STARTER: ("starter", 30),
-        PRICE_ID_PRO: ("pro", 30),
-        PRICE_ID_AGENCY: ("agency", 30),
+        PRICE_ID_STARTER: "starter",
+        PRICE_ID_PRO: "pro",
+        PRICE_ID_AGENCY: "agency",
 
-        # Anuales
-        PRICE_ID_STARTER_ANNUAL: ("starter", 365),
-        PRICE_ID_PRO_ANNUAL: ("pro", 365),
-        PRICE_ID_AGENCY_ANNUAL: ("agency", 365),
+        PRICE_ID_STARTER_ANNUAL: "starter",
+        PRICE_ID_PRO_ANNUAL: "pro",
+        PRICE_ID_AGENCY_ANNUAL: "agency",
     }
 
     credits_map = {
@@ -1114,58 +1109,56 @@ def webhook():
     }
 
     # ============================================================
-    # 1) CHECKOUT COMPLETED → PRIMERA COMPRA
+    # 1) CHECKOUT COMPLETED → Primera compra
     # ============================================================
     if event_type == "checkout.session.completed":
         email = data["customer_details"]["email"]
-        subscription_id = data.get("subscription")
+
+        subscription_id = data.get("subscription")  # ✔ CORRECTO
         customer_id = data["customer"]
 
-        # Leer price_id comprado
         line_items = stripe.checkout.Session.list_line_items(data["id"])
         price_id = line_items.data[0].price.id
 
-        plan, days = plan_map.get(price_id, ("starter", 30))
+        plan = plan_map.get(price_id, "starter")
         credits = credits_map[plan]
 
-        expires_at = (datetime.utcnow() + timedelta(days=days)).isoformat()
-
-        print(f"🆕 Nueva compra {email} → {plan} ({days} días)")
+        print(f"🆕 Nueva compra {email} → {plan}")
 
         existing = get_license_by_email(email)
+
         conn = get_db_connection()
         cur = conn.cursor()
 
         if existing:
             cur.execute("""
-                UPDATE licenses SET
-                    plan=?,
-                    credits=?,
-                    credits_left=?,
+                UPDATE licenses SET 
+                    plan=?, 
+                    credits=?, 
+                    credits_left=?, 
                     status='active',
                     stripe_customer_id=?,
-                    stripe_subscription_id=?,
-                    expires_at=?
+                    stripe_subscription_id=?
                 WHERE email=?
-            """, (plan, credits, credits, customer_id, subscription_id, expires_at, email))
+            """, (plan, credits, credits, customer_id, subscription_id, email))
+
         else:
             new_key = gen_license()
             save_license(
                 license_key=new_key,
                 email=email,
                 plan=plan,
-                credits=credits,
+                credits=credits,           # ✔ credits_left se asigna dentro
                 status="active",
                 stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-                expires_at=expires_at
+                stripe_subscription_id=subscription_id
             )
 
         conn.commit()
         conn.close()
 
     # ============================================================
-    # 2) INVOICE.PAID → RENOVACIÓN AUTOMÁTICA
+    # 2) invoice.paid → Renovación o cambio de plan
     # ============================================================
     if event_type == "invoice.paid":
 
@@ -1177,10 +1170,8 @@ def webhook():
         email = stripe.Customer.retrieve(data["customer"]).email
 
         price_id = data["lines"]["data"][0]["price"]["id"]
-        plan, days = plan_map.get(price_id, ("starter", 30))
+        plan = plan_map.get(price_id, "starter")
         credits = credits_map[plan]
-
-        expires_at = (datetime.utcnow() + timedelta(days=days)).isoformat()
 
         conn = get_db_connection()
         cur = conn.cursor()
@@ -1188,12 +1179,11 @@ def webhook():
         cur.execute("""
             UPDATE licenses SET
                 plan=?,
-                credits=?,
+                credits=?, 
                 credits_left=?,
-                status='active',
-                expires_at=?
+                status='active'
             WHERE email=?
-        """, (plan, credits, credits, expires_at, email))
+        """, (plan, credits, credits, email))
 
         conn.commit()
         conn.close()
