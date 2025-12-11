@@ -217,13 +217,14 @@ def save_license(
         email,
         plan,
         credits,
-        credits_left,
+        credits_left if credits_left is not None else credits,
         status,
         stripe_customer_id,
         stripe_subscription_id,
         expires_at,
         json.dumps(metadata or {})
     ))
+
 
     conn.commit()
     conn.close()
