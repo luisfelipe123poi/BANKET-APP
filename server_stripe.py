@@ -90,6 +90,7 @@ PLAN_DEFAULT_CREDITS = {
 }
 
 app = Flask(__name__)
+init_db()
 
 # ------------------------------------------------------------
 # RUTA PARA SALUD DE RENDER — EVITA SPAM DE GET /
@@ -259,12 +260,14 @@ def init_db():
     # -----------------------------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS email_verification_tokens (
-            email TEXT PRIMARY KEY,
-            token TEXT,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            token TEXT UNIQUE,
             used INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
 
     conn.commit()
     conn.close()
