@@ -91,6 +91,13 @@ PLAN_DEFAULT_CREDITS = {
 
 app = Flask(__name__)
 
+# ------------------------------------------------------------
+# RUTA PARA SALUD DE RENDER — EVITA SPAM DE GET /
+# ------------------------------------------------------------
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"ok": True, "service": "stripe-backend-running"}), 200
+
 # ======================================
 # SISTEMA DE TOKENS PARA EMAIL
 # ======================================
