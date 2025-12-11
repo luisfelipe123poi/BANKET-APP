@@ -90,7 +90,7 @@ PLAN_DEFAULT_CREDITS = {
 }
 
 app = Flask(__name__)
-init_db()
+
 
 # ------------------------------------------------------------
 # RUTA PARA SALUD DE RENDER — EVITA SPAM DE GET /
@@ -254,6 +254,11 @@ def init_db():
             credits_left INTEGER DEFAULT 0
         );
     """)
+
+#########################################
+# 2) AQUÍ SÍ, YA SE DEFINIÓ init_db()
+#########################################
+init_db()
 
     # -----------------------------------------
     # Tabla de tokens para verificación de email
