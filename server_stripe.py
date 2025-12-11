@@ -25,6 +25,12 @@ from sib_api_v3_sdk.models import SendSmtpEmail
 import os
 import stripe
 
+# Ruta absoluta del archivo actual (server_stripe.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Ruta absoluta hacia la base de datos SQLite
+DB_PATH = os.path.join(BASE_DIR, "stripe_licenses.db")
+
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
 if not STRIPE_SECRET_KEY:
@@ -71,8 +77,6 @@ if not STRIPE_SECRET_KEY:
     raise RuntimeError("Necesitas establecer STRIPE_SECRET_KEY en tus variables de entorno.")
 
 
-
-DB_PATH = os.path.join(os.path.dirname(__file__), "stripe_licenses.db")
 
 # Default price IDs (puedes setear en env)
 PRICE_ID_PRO = ("price_1ScJlCGznS3gtqcWGFG56OBX")
@@ -208,11 +212,10 @@ def save_license(
             stripe_customer_id,
             stripe_subscription_id,
             expires_at,
-            metadata,
-            created_at,
-            updated_at
+            metadata
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
     """, (
         license_key,
         email,
@@ -247,11 +250,13 @@ def init_db():
             email TEXT,
             plan TEXT,
             status TEXT,
-            created_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             expires_at TEXT,
             metadata TEXT,
             credits INTEGER DEFAULT 0,
             credits_left INTEGER DEFAULT 0
+
         );
     """)
 
@@ -276,6 +281,40 @@ def init_db():
 
 # Inicializar DB al arrancar
 init_db()
+
+
+# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
+def ensure_db_schema():
+    import sqlite3
+    
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    try:
+        cur.execute("PRAGMA table_info(licenses)")
+        cols = [c[1] for c in cur.fetchall()]
+    except:
+        cols = []
+
+    required_cols = [
+        "id", "license_key", "stripe_customer_id", "stripe_subscription_id",
+        "email", "plan", "status", "created_at", "updated_at",
+        "expires_at", "metadata", "credits", "credits_left"
+    ]
+
+    # Si falta alguna columna, borrar BD y regenerar
+    if not all(col in cols for col in required_cols):
+        print("⚠️ BD corrupta detectada → regenerando...")
+        conn.close()
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+        init_db()
+    else:
+        conn.close()
+
+# Ejecutar fix al iniciar servidor
+ensure_db_schema()
+
 
 # -------------------------
 # UTILITIES
@@ -793,13 +832,6 @@ def create_portal_session():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def get_license_by_email(email):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM licenses WHERE email = ?", (email,))
-    row = cur.fetchone()
-    conn.close()
-    return row
 
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
@@ -1351,7 +1383,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
 
 
 
