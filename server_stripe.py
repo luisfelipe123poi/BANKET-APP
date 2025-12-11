@@ -331,17 +331,23 @@ def update_license_by_subscription(sub_id, **kwargs):
 def get_license_by_key(key):
     conn = get_db_connection()
     cur = conn.cursor()
+
     cur.execute("SELECT * FROM licenses WHERE license_key = ?", (key,))
-    lic = cur.fetchone()
-
-    if lic:
-        lic = dict(lic)
-
-    return lic
-
     row = cur.fetchone()
     conn.close()
-    return dict(row) if row else None
+
+    if not row:
+        return None
+
+    lic = dict(row)
+
+    # Cargar metadata
+    try:
+        lic["metadata"] = json.loads(lic.get("metadata") or "{}")
+    except Exception:
+        lic["metadata"] = lic.get("metadata")
+
+    return lic
 
 def get_license_by_subscription(sub_id):
     conn = get_db_connection()
