@@ -286,46 +286,7 @@ def gen_license():
 def now_iso():
     return datetime.utcnow().isoformat()
 
-def save_license(license_key, stripe_customer_id, stripe_subscription_id, email, plan, status, expires_at=None, metadata=None, credits=None):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    # if license exists, update; else insert
-    existing = cur.execute("SELECT * FROM licenses WHERE license_key = ?", (license_key,)).fetchone()
-    meta_json = json.dumps(metadata or {})
-    created_at = now_iso()
-    expires_iso = expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at
-    if existing:
-        cur.execute("""
-    UPDATE licenses 
-    SET stripe_customer_id=?, 
-        stripe_subscription_id=?, 
-        email=?, 
-        plan=?, 
-        status=?, 
-        expires_at=?, 
-        metadata=?, 
-        credits=?, 
-        credits_left=? 
-    WHERE license_key=?
-""", (
-    stripe_customer_id,
-    stripe_subscription_id,
-    email,
-    plan,
-    status,
-    expires_iso,
-    meta_json,
-    credits if credits is not None else existing["credits"],
-    credits if credits is not None else existing["credits_left"],
-    license_key
-))
-    else:
-        cur.execute("""
-            INSERT INTO licenses (license_key, stripe_customer_id, stripe_subscription_id, email, plan, status, created_at, expires_at, metadata, credits, credits_left)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (license_key, stripe_customer_id, stripe_subscription_id, email, plan, status, created_at, expires_iso, meta_json, credits or 0, credits or 0))
-    conn.commit()
-    conn.close()
+
 
 def update_license_by_subscription(sub_id, **kwargs):
     if not kwargs:
@@ -1390,6 +1351,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
