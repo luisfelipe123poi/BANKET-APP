@@ -556,7 +556,7 @@ def create_checkout():
 def verify():
     token = request.args.get("token")
 
-    # Buscar token en la base
+    # Buscar token
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT email, used FROM email_verification_tokens WHERE token = ?", (token,))
@@ -569,65 +569,92 @@ def verify():
     email = row["email"].strip().lower()
     used = row["used"]
 
-    # 🔥 SI YA EXISTE LICENCIA → NO NOTIFICAR CREACIÓN
-    existing = get_license_by_email(email)
-    if existing:
-        # Si ya está verificado → NO mandar ningún mensaje de creación
+    # Si ya fue usado antes → correo ya verificado
+    if used:
+        existing = get_license_by_email(email)
+
+        # Convertir Row → dict
+        if existing and not isinstance(existing, dict):
+            existing = dict(existing)
+
         return jsonify({
             "ok": True,
             "already_verified": True,
-            "message": "Este correo ya fue verificado.",
+            "message": "Este correo ya fue verificado anteriormente.",
+            "email": email,
             "license": existing
         })
 
-    # 🔥 2. Marcar token como usado
+    # Marcar token como usado
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("UPDATE email_verification_tokens SET used = 1 WHERE token = ?", (token,))
     conn.commit()
     conn.close()
 
-    # 🔥 3. SI YA EXISTE LICENCIA → NO CREAR OTRA
+    # Revisar si ya existe licencia
     existing = get_license_by_email(email)
     if existing:
-        # existing viene de get_license_by_email()
-        # pero si por alguna razón NO está convertido, forzamos conversión
-        if existing and not isinstance(existing, dict):
+        if not isinstance(existing, dict):
             existing = dict(existing)
 
         return jsonify({
             "ok": True,
-            "message": "Correo ya verificado anteriormente",
+            "message": "Correo verificado.",
             "email": email,
             "license": existing
         })
 
+    # Si NO existe licencia → crear FREE automáticamente
+    new_key = gen_license()
+    save_license(
+        license_key=new_key,
+        email=email,
+        plan="free",
+        credits=10,
+        credits_left=10,
+        status="active"
+    )
 
-    # 🔥 4. SOLO si NO existe licencia → crear FREE
-    new_license = create_free_license_internal(email)
+    lic = get_license_by_email(email)
+    if lic and not isinstance(lic, dict):
+        lic = dict(lic)
 
     return jsonify({
         "ok": True,
-        "message": "Correo verificado correctamente",
+        "message": "Correo verificado. Licencia FREE creada.",
         "email": email,
-        "license": new_license
+        "license": lic
     })
 
 
-@app.route("/auth/check_status", methods=["GET"])
+@app.route("/auth/check_status")
 def check_status():
     email = request.args.get("email")
-    
+    if not email:
+        return jsonify({"ok": False, "error": "Email requerido"}), 400
+
     lic = get_license_by_email(email)
+
+    # Si no existe ninguna licencia
     if not lic:
         return jsonify({"ok": False, "verified": False})
 
+    # Convertir Row → dict
+    if not isinstance(lic, dict):
+        lic = dict(lic)
+
     return jsonify({
         "ok": True,
-        "verified": True,
-        "license": lic,
-        "credits": lic["credits_left"] if "credits_left" in lic.keys() else 0
-
+        "verified": True if lic.get("verified_email") else False,
+        "email": email,
+        "license": {
+            "license_key": lic.get("license_key"),
+            "plan": lic.get("plan"),
+            "credits": lic.get("credits"),
+            "credits_left": lic.get("credits_left"),
+            "status": lic.get("status"),
+        }
     })
 
 
@@ -796,6 +823,9 @@ def validate_license():
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
 
+    # ---------------------------------------------------
+    # Obtener licencia por key o email
+    # ---------------------------------------------------
     if email and not key:
         lic = get_license_by_email(email)
     else:
@@ -803,6 +833,12 @@ def validate_license():
 
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
+
+    # ---------------------------------------------------
+    # Convertir Row → dict SIEMPRE
+    # ---------------------------------------------------
+    if not isinstance(lic, dict):
+        lic = dict(lic)
 
     # ============================================================
     # SINCRONIZACIÓN REAL CON STRIPE
@@ -835,11 +871,10 @@ def validate_license():
 
             new_credits = credits_map[new_plan]
 
-            # Solo resetear si Stripe lo reseteó (en invoice.paid)
-            # NO resetear créditos usados aquí.
+            # Mantener créditos usados siempre
             credits_left = lic.get("credits_left", new_credits)
 
-            # Si la suscripción está cancelada / vencida / pausada
+            # Si la suscripción está cancelada / pausada / vencida
             if status not in ("active", "trialing"):
                 lic["status"] = "inactive"
 
@@ -887,7 +922,7 @@ def validate_license():
             "license_key": lic["license_key"],
             "email": lic.get("email"),
             "plan": lic.get("plan", "free"),
-            "status": lic.get("status"),
+            "status": lic.get("status", "active"),
             "credits": lic.get("credits", 0),
             "credits_left": lic.get("credits_left", 0)
         }
