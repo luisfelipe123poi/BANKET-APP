@@ -429,7 +429,7 @@ def request_verification():
     cur.execute("""
         INSERT INTO email_verification_tokens (email, token, used, created_at)
         VALUES (?, ?, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT(email) DO UPDATE SET 
+        ON CONFLICT(token) DO UPDATE SET  
             token = excluded.token,
             used = 0,
             created_at = CURRENT_TIMESTAMP;
@@ -1390,5 +1390,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
