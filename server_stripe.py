@@ -1203,6 +1203,28 @@ def webhook():
                 else:
                     print("⚠ No se encontró licencia para:", email)
 
+@app.route("/buy-credits-success", methods=["GET"])
+def buy_credits_success():
+    return """
+    <html>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h1 style="color: #22A55A;">✅ Compra completada</h1>
+            <p>Tu paquete de créditos fue acreditado correctamente.</p>
+            <p>Ya puedes cerrar esta pestaña y regresar a la aplicación.</p>
+        </body>
+    </html>
+    """
+@app.route("/buy-credits-cancel", methods=["GET"])
+def buy_credits_cancel():
+    return """
+    <html>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h1 style="color: #FF4C4C;">❌ Pago cancelado</h1>
+            <p>No se realizó ningún cargo.</p>
+            <p>Puedes volver a la aplicación y seguir creando videos.</p>
+        </body>
+    </html>
+    """
 
     # ============================================================
     # 2) invoice.paid → Renovación o cambio de plan
@@ -1478,6 +1500,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
