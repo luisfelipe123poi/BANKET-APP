@@ -1115,62 +1115,70 @@ def webhook():
     }
 
     # ============================================================
-    # 1) CHECKOUT COMPLETED → Primera compra
+    # 1) CHECKOUT COMPLETED → SOLO PARA SUSCRIPCIONES
     # ============================================================
     if event_type == "checkout.session.completed":
-        email = data["customer_details"]["email"]
+        session = data
 
-        subscription_id = data.get("subscription")  # ✔ CORRECTO
-        customer_id = data["customer"]
-
-        line_items = stripe.checkout.Session.list_line_items(data["id"])
-        price_id = line_items.data[0].price.id
-
-        plan = plan_map.get(price_id, "starter")
-        credits = credits_map[plan]
-
-        print(f"🆕 Nueva compra {email} → {plan}")
-
-        existing = get_license_by_email(email)
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        if existing:
-            cur.execute("""
-                UPDATE licenses SET 
-                    plan=?, 
-                    credits=?, 
-                    credits_left=?, 
-                    status='active',
-                    stripe_customer_id=?,
-                    stripe_subscription_id=?
-                WHERE email=?
-            """, (plan, credits, credits, customer_id, subscription_id, email))
-
+        # SOLO manejar si es SUBSCRIPCIÓN
+        if session.get("mode") != "subscription":
+            # Si no es suscripción → ignorar este bloque
+            pass
         else:
-            new_key = gen_license()
-            save_license(
-                license_key=new_key,
-                email=email,
-                plan=plan,
-                credits=credits,           # ✔ credits_left se asigna dentro
-                status="active",
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=subscription_id
-            )
+            email = session["customer_details"]["email"]
+            subscription_id = session.get("subscription")
+            customer_id = session["customer"]
 
-        conn.commit()
-        conn.close()
+            line_items = stripe.checkout.Session.list_line_items(session["id"])
+            price_id = line_items.data[0].price.id
+
+            plan = plan_map.get(price_id, "starter")
+            credits = credits_map[plan]
+
+            print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
+
+            existing = get_license_by_email(email)
+
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            if existing:
+                cur.execute("""
+                    UPDATE licenses SET 
+                        plan=?, 
+                        credits=?, 
+                        credits_left=?, 
+                        status='active',
+                        stripe_customer_id=?,
+                        stripe_subscription_id=?
+                    WHERE email=?
+                """, (plan, credits, credits, customer_id, subscription_id, email))
+
+            else:
+                new_key = gen_license()
+                save_license(
+                    license_key=new_key,
+                    email=email,
+                    plan=plan,
+                    credits=credits,
+                    status="active",
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=subscription_id
+                )
+
+            conn.commit()
+            conn.close()
 
     # ============================================================
-    # ✔ PAGO ÚNICO COMPLETADO — COMPRA DE CRÉDITOS INDIVIDUALES
-    # (BLOQUE EXACTO QUE ME PEDISTE)
+    # 2) CHECKOUT COMPLETED → SOLO PARA PAGOS ÚNICOS (packs)
     # ============================================================
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
 
-        if session.get("mode") == "payment":
+        # SOLO manejar si es PAGO ÚNICO
+        if session.get("mode") != "payment":
+            pass
+        else:
             email = session.get("customer_email")
             pack = session.get("metadata", {}).get("pack")
 
@@ -1180,7 +1188,6 @@ def webhook():
                 lic = get_license_by_email(email)
                 if lic:
                     extra = int(pack)
-
                     new_total = lic["credits_left"] + extra
 
                     conn = get_db_connection()
@@ -1195,6 +1202,7 @@ def webhook():
                     print(f"🟩 Créditos sumados: +{extra} para {email} | Total: {new_total}")
                 else:
                     print("⚠ No se encontró licencia para:", email)
+
 
     # ============================================================
     # 2) invoice.paid → Renovación o cambio de plan
@@ -1470,5 +1478,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
