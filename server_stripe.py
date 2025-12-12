@@ -710,7 +710,7 @@ def verify():
                 Ya puedes comenzar a generar tus videos.<br><br>
                 Hemos añadido <b>10 créditos gratuitos</b> a tu cuenta para que explores todas las funciones principales.
             </div>
-            <a class="cta" href="https://turboclips.com">Ir al sitio</a>
+            
         </div>
     </body>
     </html>
@@ -1562,7 +1562,7 @@ def success():
                 Ya puedes cerrar esta ventana y volver a TurboClips.  
                 Tu cuenta ha sido actualizada y tus beneficios están activos.
             </div>
-            <a class="cta" href="https://turboclips.com">Volver al sitio</a>
+            
         </div>
     </body>
     </html>
@@ -1628,7 +1628,7 @@ def cancel():
                 Puedes intentarlo nuevamente cuando estés listo.  
                 Si necesitas ayuda, nuestro equipo está disponible para ayudarte.
             </div>
-            <a class="cta" href="https://turboclips.com">Volver al sitio</a>
+            
         </div>
     </body>
     </html>
@@ -1688,6 +1688,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
