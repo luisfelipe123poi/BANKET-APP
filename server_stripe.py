@@ -1164,39 +1164,6 @@ def webhook():
         conn.close()
 
     # ============================================================
-    # ✔ PAGO ÚNICO COMPLETADO — COMPRA DE CRÉDITOS INDIVIDUALES
-    # (BLOQUE EXACTO QUE ME PEDISTE)
-    # ============================================================
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-
-        if session.get("mode") == "payment":
-            email = session.get("customer_email")
-            pack = session.get("metadata", {}).get("pack")
-
-            print("🟦 Pago único detectado → compra de créditos:", pack)
-
-            if email and pack:
-                lic = get_license_by_email(email)
-                if lic:
-                    extra = int(pack)
-
-                    new_total = lic["credits_left"] + extra
-
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(
-                        "UPDATE licenses SET credits_left = ? WHERE license_key = ?",
-                        (new_total, lic["license_key"])
-                    )
-                    conn.commit()
-                    conn.close()
-
-                    print(f"🟩 Créditos sumados: +{extra} para {email} | Total: {new_total}")
-                else:
-                    print("⚠ No se encontró licencia para:", email)
-
-    # ============================================================
     # 2) invoice.paid → Renovación o cambio de plan
     # ============================================================
     if event_type == "invoice.paid":
@@ -1318,47 +1285,6 @@ def create_free_license():
         "license": new_license
     })
 
-@app.route("/buy-credits", methods=["GET"])
-def buy_credits():
-    """
-    Crea una sesión de checkout para comprar packs de créditos (100, 300, 1000).
-    No modifica el plan. Solo suma créditos al finalizar el pago.
-    """
-    email = request.args.get("email")
-    pack = request.args.get("pack")
-
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
-    if pack not in ["100", "300", "1000"]:
-        return jsonify({"ok": False, "error": "pack inválido"}), 400
-
-    # Define el price_id de Stripe según el paquete
-    PACK_PRICE_MAP = {
-        "100": os.getenv("PRICE_PACK_100"),
-        "300": os.getenv("PRICE_PACK_300"),
-        "1000": os.getenv("PRICE_PACK_1000"),
-    }
-
-    price_id = PACK_PRICE_MAP[pack]
-
-    try:
-        session = stripe.checkout.Session.create(
-            customer_email=email,
-            line_items=[{"price": price_id, "quantity": 1}],
-            mode="payment",
-            success_url=PUBLIC_DOMAIN + "/buy-credits-success",
-            cancel_url=PUBLIC_DOMAIN + "/cancel",
-            metadata={"pack": pack, "email": email}
-         )
-
-
-        return redirect(session.url, code=302)
-
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 @app.route("/ads/banner", methods=["GET"])
 def get_banner_ads():
 
@@ -1378,7 +1304,6 @@ def get_banner_ads():
     ]
 
     return jsonify({"ads": anuncios})
-
 
 
 @app.route("/ads/popup")
