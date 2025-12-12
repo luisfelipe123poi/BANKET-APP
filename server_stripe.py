@@ -652,10 +652,22 @@ def verify():
 
     return jsonify({
         "ok": True,
-        "message": "Correo verificado. Licencia FREE creada.",
+        "status": "verified",
         "email": email,
-        "license": lic
+        "license": lic,
+
+        # ---------------------------
+        # 📣 NUEVOS CAMPOS PROFESIONALES
+        # ---------------------------
+        "message_title": "🎉 ¡Correo verificado con éxito!",
+        "message_subtitle": "Tu licencia FREE ha sido activada.",
+        "message_body": (
+            "Ya puedes comenzar a generar tus videos. "
+            "Hemos añadido 10 créditos gratuitos a tu cuenta para que explores todas las funciones principales."
+        ),
+        "cta": "Actualiza a PRO en cualquier momento para obtener más créditos y características avanzadas."
     })
+
 
 
 @app.route("/auth/check_status")
@@ -1501,6 +1513,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
