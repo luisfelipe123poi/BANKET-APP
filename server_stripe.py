@@ -1377,8 +1377,9 @@ def buy_credits():
             customer_email=email,
             line_items=[{"price": price_id, "quantity": 1}],
             mode="payment",
-            success_url=PUBLIC_DOMAIN + "/buy-credits-success",
-            cancel_url=PUBLIC_DOMAIN + "/cancel",
+            success_url = PUBLIC_DOMAIN + "/buy-credits-success",
+            cancel_url = PUBLIC_DOMAIN + "/buy-credits-cancel",
+
             metadata={"pack": pack, "email": email}
          )
 
@@ -1500,6 +1501,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
