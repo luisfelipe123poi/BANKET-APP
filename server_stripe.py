@@ -1285,6 +1285,109 @@ def create_free_license():
         "license": new_license
     })
 
+@app.post("/stripe/create_checkout_session_addons")
+def create_checkout_session_addons():
+    data = request.json
+    email = data.get("email")
+    pack = data.get("pack")  # 100, 300 o 1000 créditos
+
+    if not email or not pack:
+        return jsonify({"ok": False, "error": "Email y pack requeridos"}), 400
+
+    # Precios de tus packs
+    PRICE_MAP = {
+        100: 9,
+        300: 19,
+        1000: 39
+    }
+
+    if pack not in PRICE_MAP:
+        return jsonify({"ok": False, "error": "Pack inválido"}), 400
+
+    price_usd = PRICE_MAP[pack]
+
+    try:
+        checkout = stripe.checkout.Session.create(
+            mode="payment",
+            customer_email=email,
+            success_url=f"https://stripe-backend-r14f.onrender.com/stripe/success_addons?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url="https://stripe-backend-r14f.onrender.com/cancel",
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"Paquete de {pack} créditos"},
+                        "unit_amount": price_usd * 100,  # en centavos
+                    },
+                    "quantity": 1
+                }
+            ]
+        )
+
+        return jsonify({"ok": True, "checkout_url": checkout.url})
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.get("/stripe/success_addons")
+def success_addons():
+    session_id = request.args.get("session_id")
+    if not session_id:
+        return "Falta session_id", 400
+
+    session = stripe.checkout.Session.retrieve(session_id)
+    email = session.customer_email
+    product_name = session["line_items"]["data"][0]["description"] if "line_items" in session else ""
+
+    # Determinar pack comprado
+    if "100" in product_name:
+        pack = 100
+    elif "300" in product_name:
+        pack = 300
+    elif "1000" in product_name:
+        pack = 1000
+    else:
+        return "Pack inválido", 400
+
+    # Obtener licencia
+    lic = get_license_by_email(email)
+
+    if not lic:
+        return "No existe licencia para este correo", 400
+
+    new_credits = lic["credits_left"] + pack
+
+    # Actualizar
+    update_license_credits(email=email, credits_left=new_credits)
+
+    return f"Créditos agregados exitosamente. Ahora tienes {new_credits}", 200
+
+def update_license_credits(email, credits_left, credits_total=None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    if credits_total is None:
+        cur.execute("""
+            UPDATE licenses
+            SET credits_left = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE email = ?
+        """, (credits_left, email))
+    else:
+        cur.execute("""
+            UPDATE licenses
+            SET credits_left = ?,
+                credits = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE email = ?
+        """, (credits_left, credits_total, email))
+
+    conn.commit()
+    conn.close()
+
+    return True
+
+
 @app.route("/ads/banner", methods=["GET"])
 def get_banner_ads():
 
@@ -1395,6 +1498,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
