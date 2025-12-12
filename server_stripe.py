@@ -1509,11 +1509,146 @@ def ads_popup():
 
 @app.route("/success")
 def success():
-    return "<h1>✅ Pago completado con éxito</h1><p>Ya puedes cerrar esta página.</p>"
+    html = """
+    <html>
+    <head>
+        <meta charset='UTF-8'>
+        <title>Pago completado</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #0f0f0f;
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }
+            .card {
+                background-color: #1c1c1c;
+                padding: 30px;
+                border-radius: 12px;
+                display: inline-block;
+                text-align: center;
+                max-width: 500px;
+                box-shadow: 0 0 20px rgba(76, 217, 100, 0.25);
+            }
+            .title {
+                font-size: 28px;
+                margin-bottom: 10px;
+                color: #4CD964;
+            }
+            .subtitle {
+                font-size: 18px;
+                margin-bottom: 20px;
+                color: #cccccc;
+            }
+            .body-text {
+                font-size: 15px;
+                margin-bottom: 30px;
+                color: #aaaaaa;
+                line-height: 1.6;
+            }
+            .cta {
+                display: inline-block;
+                background-color: #FF8C42;
+                color: white;
+                padding: 12px 25px;
+                border-radius: 8px;
+                font-size: 16px;
+                text-decoration: none;
+                transition: 0.2s;
+            }
+            .cta:hover {
+                background-color: #ff7a1f;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1 class="title">🎉 ¡Pago completado con éxito!</h1>
+            <div class="subtitle">Tu suscripción ha sido activada.</div>
+            <div class="body-text">
+                Gracias por confiar en <b>TurboClips</b>.<br><br>
+                Tu plan ya está disponible en la aplicación.<br>
+                Puedes cerrar esta ventana con total seguridad.
+            </div>
+            <a class="cta" href="https://turboclips.com">Volver al sitio</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
 
 @app.route("/cancel")
 def cancel():
-    return "<h1>❌ Pago cancelado</h1><p>Intenta nuevamente.</p>"
+    html = """
+    <html>
+    <head>
+        <meta charset='UTF-8'>
+        <title>Pago cancelado</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #0f0f0f;
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }
+            .card {
+                background-color: #1c1c1c;
+                padding: 30px;
+                border-radius: 12px;
+                display: inline-block;
+                text-align: center;
+                max-width: 500px;
+                box-shadow: 0 0 20px rgba(255, 59, 48, 0.25);
+            }
+            .title {
+                font-size: 28px;
+                margin-bottom: 10px;
+                color: #FF3B30;
+            }
+            .subtitle {
+                font-size: 18px;
+                margin-bottom: 20px;
+                color: #cccccc;
+            }
+            .body-text {
+                font-size: 15px;
+                margin-bottom: 30px;
+                color: #aaaaaa;
+                line-height: 1.6;
+            }
+            .cta {
+                display: inline-block;
+                background-color: #FF8C42;
+                color: white;
+                padding: 12px 25px;
+                border-radius: 8px;
+                font-size: 16px;
+                text-decoration: none;
+                transition: 0.2s;
+            }
+            .cta:hover {
+                background-color: #ff7a1f;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1 class="title">❌ Pago cancelado</h1>
+            <div class="subtitle">La suscripción no fue completada.</div>
+            <div class="body-text">
+                No te preocupes, puedes intentarlo nuevamente cuando quieras.<br><br>
+                Ningún cargo ha sido aplicado.
+            </div>
+            <a class="cta" href="https://turboclips.com">Volver al sitio</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
 
    
 
@@ -1566,6 +1701,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
