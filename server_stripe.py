@@ -650,23 +650,76 @@ def verify():
     if lic and not isinstance(lic, dict):
         lic = dict(lic)
 
-    return jsonify({
-        "ok": True,
-        "status": "verified",
-        "email": email,
-        "license": lic,
+    html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Correo verificado</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #0f0f0f;
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }}
+            .card {{
+                background-color: #1c1c1c;
+                padding: 30px;
+                border-radius: 12px;
+                display: inline-block;
+                text-align: center;
+                max-width: 500px;
+                box-shadow: 0 0 20px rgba(255, 140, 66, 0.3);
+            }}
+            .title {{
+                font-size: 28px;
+                margin-bottom: 10px;
+                color: #4CD964;
+            }}
+            .subtitle {{
+                font-size: 18px;
+                margin-bottom: 20px;
+                color: #cccccc;
+            }}
+            .body-text {{
+                font-size: 15px;
+                margin-bottom: 30px;
+                color: #aaaaaa;
+                line-height: 1.6;
+            }}
+            .cta {{
+                display: inline-block;
+                background-color: #FF8C42;
+                color: white;
+                padding: 12px 25px;
+                border-radius: 8px;
+                font-size: 16px;
+                text-decoration: none;
+                transition: 0.2s;
+            }}
+            .cta:hover {{
+                background-color: #ff7a1f;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1 class="title">🎉 ¡Correo verificado con éxito!</h1>
+            <div class="subtitle">Tu licencia FREE ha sido activada.</div>
+            <div class="body-text">
+                Ya puedes comenzar a generar tus videos.<br><br>
+                Hemos añadido <b>10 créditos gratuitos</b> a tu cuenta 
+                para que explores todas las funciones principales.
+            </div>
+            <a class="cta" href="https://turboclips.com">Ir al sitio</a>
+        </div>
+    </body>
+    </html>
+    """
 
-        # ---------------------------
-        # 📣 NUEVOS CAMPOS PROFESIONALES
-        # ---------------------------
-        "message_title": "🎉 ¡Correo verificado con éxito!",
-        "message_subtitle": "Tu licencia FREE ha sido activada.",
-        "message_body": (
-            "Ya puedes comenzar a generar tus videos. "
-            "Hemos añadido 10 créditos gratuitos a tu cuenta para que explores todas las funciones principales."
-        ),
-        "cta": "Actualiza a PRO en cualquier momento para obtener más créditos y características avanzadas."
-    })
+    return html
+
 
 
 
@@ -1513,6 +1566,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
