@@ -650,7 +650,7 @@ def verify():
     if lic and not isinstance(lic, dict):
         lic = dict(lic)
 
-    html = f"""
+    return f"""
     <html>
     <head>
         <meta charset="UTF-8">
@@ -668,7 +668,6 @@ def verify():
                 padding: 30px;
                 border-radius: 12px;
                 display: inline-block;
-                text-align: center;
                 max-width: 500px;
                 box-shadow: 0 0 20px rgba(255, 140, 66, 0.3);
             }}
@@ -709,8 +708,7 @@ def verify():
             <div class="subtitle">Tu licencia FREE ha sido activada.</div>
             <div class="body-text">
                 Ya puedes comenzar a generar tus videos.<br><br>
-                Hemos añadido <b>10 créditos gratuitos</b> a tu cuenta 
-                para que explores todas las funciones principales.
+                Hemos añadido <b>10 créditos gratuitos</b> a tu cuenta para que explores todas las funciones principales.
             </div>
             <a class="cta" href="https://turboclips.com">Ir al sitio</a>
         </div>
@@ -1512,7 +1510,7 @@ def success():
     html = """
     <html>
     <head>
-        <meta charset='UTF-8'>
+        <meta charset="UTF-8">
         <title>Pago completado</title>
         <style>
             body {
@@ -1529,7 +1527,6 @@ def success():
                 display: inline-block;
                 text-align: center;
                 max-width: 500px;
-                box-shadow: 0 0 20px rgba(76, 217, 100, 0.25);
             }
             .title {
                 font-size: 28px;
@@ -1545,7 +1542,6 @@ def success():
                 font-size: 15px;
                 margin-bottom: 30px;
                 color: #aaaaaa;
-                line-height: 1.6;
             }
             .cta {
                 display: inline-block;
@@ -1555,21 +1551,16 @@ def success():
                 border-radius: 8px;
                 font-size: 16px;
                 text-decoration: none;
-                transition: 0.2s;
-            }
-            .cta:hover {
-                background-color: #ff7a1f;
             }
         </style>
     </head>
     <body>
         <div class="card">
-            <h1 class="title">🎉 ¡Pago completado con éxito!</h1>
-            <div class="subtitle">Tu suscripción ha sido activada.</div>
+            <h1 class="title">✅ ¡Pago completado con éxito!</h1>
+            <div class="subtitle">Tu suscripción ha sido activada correctamente.</div>
             <div class="body-text">
-                Gracias por confiar en <b>TurboClips</b>.<br><br>
-                Tu plan ya está disponible en la aplicación.<br>
-                Puedes cerrar esta ventana con total seguridad.
+                Ya puedes cerrar esta ventana y volver a TurboClips.  
+                Tu cuenta ha sido actualizada y tus beneficios están activos.
             </div>
             <a class="cta" href="https://turboclips.com">Volver al sitio</a>
         </div>
@@ -1579,12 +1570,13 @@ def success():
     return html
 
 
+
 @app.route("/cancel")
 def cancel():
     html = """
     <html>
     <head>
-        <meta charset='UTF-8'>
+        <meta charset="UTF-8">
         <title>Pago cancelado</title>
         <style>
             body {
@@ -1601,12 +1593,11 @@ def cancel():
                 display: inline-block;
                 text-align: center;
                 max-width: 500px;
-                box-shadow: 0 0 20px rgba(255, 59, 48, 0.25);
             }
             .title {
                 font-size: 28px;
                 margin-bottom: 10px;
-                color: #FF3B30;
+                color: #FF4C4C;
             }
             .subtitle {
                 font-size: 18px;
@@ -1617,7 +1608,6 @@ def cancel():
                 font-size: 15px;
                 margin-bottom: 30px;
                 color: #aaaaaa;
-                line-height: 1.6;
             }
             .cta {
                 display: inline-block;
@@ -1627,20 +1617,16 @@ def cancel():
                 border-radius: 8px;
                 font-size: 16px;
                 text-decoration: none;
-                transition: 0.2s;
-            }
-            .cta:hover {
-                background-color: #ff7a1f;
             }
         </style>
     </head>
     <body>
         <div class="card">
             <h1 class="title">❌ Pago cancelado</h1>
-            <div class="subtitle">La suscripción no fue completada.</div>
+            <div class="subtitle">No se ha realizado ningún cobro.</div>
             <div class="body-text">
-                No te preocupes, puedes intentarlo nuevamente cuando quieras.<br><br>
-                Ningún cargo ha sido aplicado.
+                Puedes intentarlo nuevamente cuando estés listo.  
+                Si necesitas ayuda, nuestro equipo está disponible para ayudarte.
             </div>
             <a class="cta" href="https://turboclips.com">Volver al sitio</a>
         </div>
@@ -1648,6 +1634,7 @@ def cancel():
     </html>
     """
     return html
+
 
 
    
@@ -1701,6 +1688,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
