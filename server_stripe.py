@@ -558,23 +558,30 @@ def create_checkout():
     email = request.args.get("email")
     price_id = request.args.get("priceId")
 
-    if not email or not price_id:
-        return jsonify({"ok": False, "error": "email y priceId son requeridos"}), 400
+    # ❗ SOLO priceId es obligatorio
+    if not price_id:
+        return jsonify({"ok": False, "error": "priceId es requerido"}), 400
 
     try:
-        session = stripe.checkout.Session.create(
-            customer_email=email,  # email libre
-            line_items=[{"price": price_id, "quantity": 1}],
-            mode="subscription",
-            success_url=PUBLIC_DOMAIN + "/success",
-            cancel_url=PUBLIC_DOMAIN + "/cancel",
-        )
+        checkout_args = {
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "mode": "subscription",
+            "success_url": PUBLIC_DOMAIN + "/success",
+            "cancel_url": PUBLIC_DOMAIN + "/cancel",
+        }
+
+        # 👉 SOLO pasar email si existe
+        if email:
+            checkout_args["customer_email"] = email
+
+        session = stripe.checkout.Session.create(**checkout_args)
 
         return redirect(session.url, code=302)
 
     except Exception as e:
         print("❌ Error creando checkout:", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+
 
 
 @app.route("/auth/verify", methods=["GET"])
@@ -1684,6 +1691,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
