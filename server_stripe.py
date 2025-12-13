@@ -1284,7 +1284,7 @@ def webhook():
 
             conn.commit()
             conn.close()
-
+            return "OK", 200
 
 @app.route("/buy-credits-success", methods=["GET"])
 def buy_credits_success():
@@ -1709,6 +1709,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
