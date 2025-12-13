@@ -1415,37 +1415,38 @@ def create_free_license():
 def buy_credits():
     """
     Crea una sesión de checkout para comprar packs de créditos (100, 300, 1000).
-    No modifica el plan. Solo suma créditos al finalizar el pago.
+    No requiere email previo.
+    El email definitivo se obtiene desde Stripe en el webhook.
     """
-    email = request.args.get("email")
     pack = request.args.get("pack")
 
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
     if pack not in ["100", "300", "1000"]:
-        return jsonify({"ok": False, "error": "pack inválido"}), 400
+        return jsonify({"ok": False, "error": "pack_invalido"}), 400
 
-    # Define el price_id de Stripe según el paquete
     PACK_PRICE_MAP = {
         "100": os.getenv("PRICE_PACK_100"),
         "300": os.getenv("PRICE_PACK_300"),
         "1000": os.getenv("PRICE_PACK_1000"),
     }
 
-    price_id = PACK_PRICE_MAP[pack]
+    price_id = PACK_PRICE_MAP.get(pack)
+    if not price_id:
+        return jsonify({"ok": False, "error": "price_no_configurado"}), 500
 
     try:
         session = stripe.checkout.Session.create(
-            customer_email=email,
-            line_items=[{"price": price_id, "quantity": 1}],
             mode="payment",
-            success_url = PUBLIC_DOMAIN + "/buy-credits-success",
-            cancel_url = PUBLIC_DOMAIN + "/buy-credits-cancel",
-
-            metadata={"pack": pack, "email": email}
-         )
-
+            payment_method_types=["card"],
+            line_items=[{
+                "price": price_id,
+                "quantity": 1
+            }],
+            success_url=PUBLIC_DOMAIN + "/buy-credits-success",
+            cancel_url=PUBLIC_DOMAIN + "/buy-credits-cancel",
+            metadata={
+                "pack": pack
+            }
+        )
 
         return redirect(session.url, code=302)
 
@@ -1688,6 +1689,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
