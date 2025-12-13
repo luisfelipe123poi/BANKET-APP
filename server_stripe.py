@@ -955,10 +955,10 @@ def validate_license():
             new_plan = plan_map.get(price_id, lic["plan"])
 
             credits_map = {
-                "starter": 100,
-                "pro": 300,
-                "agency": 1200,
-                "free": 10
+                "starter": 3,
+                "pro": 5,
+                "agency": 7,
+                "free": 2
             }
 
             new_credits = credits_map[new_plan]
@@ -1683,6 +1683,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
