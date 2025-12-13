@@ -563,12 +563,13 @@ def create_checkout():
 
     try:
         session = stripe.checkout.Session.create(
-            customer_email=email,
+            customer_email=email,  # email libre
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url="https://stripe-backend-r14f.onrender.com/success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="https://stripe-backend-r14f.onrender.com/cancel",
+            success_url=PUBLIC_DOMAIN + "/success",
+            cancel_url=PUBLIC_DOMAIN + "/cancel",
         )
+
         return redirect(session.url, code=302)
 
     except Exception as e:
@@ -1683,6 +1684,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
