@@ -556,6 +556,11 @@ def use_credit():
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
     email = request.args.get("email")
+
+    # 🧼 NORMALIZAR EMAIL
+    if not email or email.lower() in ["none", "null", "undefined", ""]:
+        email = None
+
     price_id = request.args.get("priceId")
 
     # ❗ SOLO priceId es obligatorio
@@ -1691,6 +1696,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
