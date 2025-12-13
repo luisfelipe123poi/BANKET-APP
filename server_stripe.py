@@ -1153,18 +1153,17 @@ def webhook():
         return "Invalid", 400
 
     event_type = event["type"]
-    data = event["data"]["object"]
+    session = event["data"]["object"]
 
     print("🔔 Webhook recibido:", event_type)
 
     # -------------------------
-    # MAPEO PLANES COMPLETO
+    # MAPEO PLANES
     # -------------------------
     plan_map = {
         PRICE_ID_STARTER: "starter",
         PRICE_ID_PRO: "pro",
         PRICE_ID_AGENCY: "agency",
-
         PRICE_ID_STARTER_ANNUAL: "starter",
         PRICE_ID_PRO_ANNUAL: "pro",
         PRICE_ID_AGENCY_ANNUAL: "agency",
@@ -1178,27 +1177,15 @@ def webhook():
     }
 
     # ============================================================
-    # 1) CHECKOUT COMPLETED → SOLO PARA SUSCRIPCIONES
-    # ============================================================
-    # ============================================================
-    # 🔔 CHECKOUT COMPLETED (SUBSCRIPCIONES Y PAGOS ÚNICOS)
+    # CHECKOUT COMPLETED
     # ============================================================
     if event_type == "checkout.session.completed":
-        session = data
-        mode = session.get("mode")
 
-        email = session.get("customer_details", {}).get("email")
-        customer_id = session.get("customer")
-
-        if not email:
-            print("⚠ Checkout sin email, ignorado")
-            return "OK", 200
-
-        # ========================================================
-        # 🔁 SUSCRIPCIONES
-        # ========================================================
-        if mode == "subscription":
+        # 🟩 SUSCRIPCIONES
+        if session.get("mode") == "subscription":
+            email = session["customer_details"]["email"]
             subscription_id = session.get("subscription")
+            customer_id = session.get("customer")
 
             line_items = stripe.checkout.Session.list_line_items(session["id"])
             price_id = line_items.data[0].price.id
@@ -1208,21 +1195,21 @@ def webhook():
 
             print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
 
-            lic = get_license_by_email(email)
+            existing = get_license_by_email(email)
 
             conn = get_db_connection()
             cur = conn.cursor()
 
-            if lic:
+            if existing:
                 cur.execute("""
                     UPDATE licenses SET 
-                        plan = ?, 
-                        credits = ?, 
-                        credits_left = ?, 
-                        status = 'active',
-                        stripe_customer_id = ?,
-                        stripe_subscription_id = ?
-                    WHERE email = ?
+                        plan=?,
+                        credits=?,
+                        credits_left=?,
+                        status='active',
+                        stripe_customer_id=?,
+                        stripe_subscription_id=?
+                    WHERE email=?
                 """, (plan, credits, credits, customer_id, subscription_id, email))
             else:
                 new_key = gen_license()
@@ -1231,7 +1218,6 @@ def webhook():
                     email=email,
                     plan=plan,
                     credits=credits,
-                    credits_left=credits,
                     status="active",
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id
@@ -1240,51 +1226,39 @@ def webhook():
             conn.commit()
             conn.close()
 
-        # ========================================================
-        # 💳 PAGOS ÚNICOS (COMPRA DE CRÉDITOS)
-        # ========================================================
-        elif mode == "payment":
+        # 🟦 PAGOS ÚNICOS (PACKS)
+        elif session.get("mode") == "payment":
+            email = session.get("customer_email")
             pack = session.get("metadata", {}).get("pack")
 
-            print("🟦 Pago único detectado → pack:", pack, "email:", email)
+            print("🟦 Pago único detectado → pack:", pack)
 
-            if not pack:
-                print("⚠ Pago sin pack, ignorado")
-                return "OK", 200
+            if email and pack:
+                lic = get_license_by_email(email)
+                if lic:
+                    extra = int(pack)
+                    new_total = lic["credits_left"] + extra
 
-            extra = int(pack)
-            lic = get_license_by_email(email)
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE licenses SET credits_left = ? WHERE license_key = ?",
+                        (new_total, lic["license_key"])
+                    )
+                    conn.commit()
+                    conn.close()
 
-            conn = get_db_connection()
-            cur = conn.cursor()
+                    print(f"🟩 Créditos sumados: +{extra} → {email}")
 
-            if not lic:
-                # 🆕 Crear licencia automáticamente
-                new_key = gen_license()
-                save_license(
-                    license_key=new_key,
-                    email=email,
-                    plan="free",
-                    credits=extra,
-                    credits_left=extra,
-                    status="active",
-                    stripe_customer_id=customer_id
-                )
-                print(f"🆕 Licencia creada para {email} con {extra} créditos")
-            else:
-                if not isinstance(lic, dict):
-                    lic = dict(lic)
+    # ============================================================
+    # OTROS EVENTOS → IGNORAR PERO RESPONDER OK
+    # ============================================================
+    else:
+        print(f"ℹ Evento ignorado: {event_type}")
 
-                new_total = lic["credits_left"] + extra
-                cur.execute(
-                    "UPDATE licenses SET credits_left = ? WHERE license_key = ?",
-                    (new_total, lic["license_key"])
-                )
-                print(f"🟩 Créditos sumados: +{extra} → Total: {new_total}")
+    # 🔥 ESTO ES OBLIGATORIO
+    return "OK", 200
 
-            conn.commit()
-            conn.close()
-            return "OK", 200
 
 @app.route("/buy-credits-success", methods=["GET"])
 def buy_credits_success():
@@ -1709,6 +1683,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
