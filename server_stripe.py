@@ -1196,7 +1196,11 @@ def webhook():
 
         # 🟩 SUSCRIPCIONES
         if session.get("mode") == "subscription":
-            email = session["customer_details"]["email"]
+            email = (
+                session.get("customer_email")
+                or session.get("customer_details", {}).get("email")
+            )
+
             subscription_id = session.get("subscription")
             customer_id = session.get("customer")
 
@@ -1696,6 +1700,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
