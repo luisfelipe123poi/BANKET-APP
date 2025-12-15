@@ -492,6 +492,33 @@ def create_free_license_internal(email):
         "credits": credits
     }
 
+@app.route("/license/resolve", methods=["POST"])
+def resolve_license():
+    data = request.json or {}
+    email = data.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"ok": False, "error": "Email requerido"}), 400
+
+    lic = get_license_by_email(email)
+
+    if not lic:
+        return jsonify({
+            "ok": True,
+            "exists": False,
+            "plan": "free"
+        })
+
+    return jsonify({
+        "ok": True,
+        "exists": True,
+        "license_key": lic["license_key"],
+        "plan": lic["plan"],
+        "credits_left": lic.get("credits_left", 0),
+        "status": lic.get("status", "active")
+    })
+
+
 @app.route("/auth/request_code", methods=["POST"])
 def request_code():
     data = request.json
@@ -1683,6 +1710,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
