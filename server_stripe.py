@@ -1735,8 +1735,3 @@ def cancel():
         "credits": credits_total
     })
 
-
-
-
-
-
