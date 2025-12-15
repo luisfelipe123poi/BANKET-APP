@@ -1734,4 +1734,3 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
