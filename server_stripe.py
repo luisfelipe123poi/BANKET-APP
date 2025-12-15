@@ -1208,9 +1208,24 @@ def webhook():
     # ============================================================
     if event_type == "checkout.session.completed":
 
+        # ============================================================
+        # OBTENER EMAIL DE FORMA SEGURA Y NORMALIZADA (OBLIGATORIO)
+        # ============================================================
+        email = (
+            session.get("customer_details", {}).get("email")
+            or session.get("customer_email")
+        )
+
+        if not email:
+            print("❌ Checkout sin email, evento ignorado")
+            return "OK", 200
+
+        email = email.strip().lower()
+
+        # ============================================================
         # 🟩 SUSCRIPCIONES
+        # ============================================================
         if session.get("mode") == "subscription":
-            email = session["customer_details"]["email"]
             subscription_id = session.get("subscription")
             customer_id = session.get("customer")
 
@@ -1236,8 +1251,15 @@ def webhook():
                         status='active',
                         stripe_customer_id=?,
                         stripe_subscription_id=?
-                    WHERE email=?
-                """, (plan, credits, credits, customer_id, subscription_id, email))
+                    WHERE license_key=?
+                """, (
+                    plan,
+                    credits,
+                    credits,
+                    customer_id,
+                    subscription_id,
+                    existing["license_key"]
+                ))
             else:
                 new_key = gen_license()
                 save_license(
@@ -1253,14 +1275,15 @@ def webhook():
             conn.commit()
             conn.close()
 
+        # ============================================================
         # 🟦 PAGOS ÚNICOS (PACKS)
+        # ============================================================
         elif session.get("mode") == "payment":
-            email = session.get("customer_email")
             pack = session.get("metadata", {}).get("pack")
 
             print("🟦 Pago único detectado → pack:", pack)
 
-            if email and pack:
+            if pack:
                 lic = get_license_by_email(email)
                 if lic:
                     extra = int(pack)
@@ -1280,11 +1303,12 @@ def webhook():
     # ============================================================
     # OTROS EVENTOS → IGNORAR PERO RESPONDER OK
     # ============================================================
-    else:
+else:
         print(f"ℹ Evento ignorado: {event_type}")
 
-    # 🔥 ESTO ES OBLIGATORIO
-    return "OK", 200
+# 🔥 ESTO ES OBLIGATORIO
+return "OK", 200
+
 
 
 @app.route("/buy-credits-success", methods=["GET"])
@@ -1710,7 +1734,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
 
 
 
