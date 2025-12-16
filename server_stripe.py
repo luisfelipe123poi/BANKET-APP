@@ -746,6 +746,9 @@ def verify():
     return html
 
 
+# ============================================================
+# 🔁 ACTUALIZAR EMAIL DE LICENCIA EXISTENTE (SIN CAMBIAR PLAN)
+# ============================================================
 @app.route("/auth/change_email", methods=["POST"])
 def change_email():
     data = request.json or {}
@@ -759,7 +762,7 @@ def change_email():
             "error": "old_email y new_email son requeridos"
         }), 400
 
-    # Buscar licencia por email anterior
+    # 🔍 Buscar licencia EXISTENTE
     lic = get_license_by_email(old_email)
     if not lic:
         return jsonify({
@@ -767,13 +770,13 @@ def change_email():
             "error": "No se encontró licencia para el email actual"
         }), 404
 
-    # Actualizar email en licencia
+    # 🔒 PROTECCIÓN: no tocar plan, créditos, stripe, nada
     lic["email"] = new_email
-    lic["verified"] = False  # 🔥 el nuevo email debe verificarse
+    lic["verified"] = False  # el nuevo correo debe verificarse
 
     save_license(lic)
 
-    # Enviar verificación SOLO para el nuevo correo
+    # ✉️ Enviar verificación SOLO al nuevo correo
     try:
         send_verification_email(new_email)
     except Exception as e:
@@ -784,6 +787,7 @@ def change_email():
         "message": "Correo actualizado. Verificación enviada.",
         "license": lic
     })
+
 
 
 @app.route("/auth/check_status")
@@ -1772,4 +1776,5 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
