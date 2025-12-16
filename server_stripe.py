@@ -753,34 +753,34 @@ def verify():
 def change_email():
     data = request.json or {}
 
-    old_email = (data.get("old_email") or "").strip().lower()
+    license_key = (data.get("license_key") or "").strip()
     new_email = (data.get("new_email") or "").strip().lower()
 
-    if not old_email or not new_email:
+    if not license_key or not new_email:
         return jsonify({
             "ok": False,
-            "error": "old_email y new_email son requeridos"
+            "error": "license_key y new_email son requeridos"
         }), 400
 
-    # 🔍 Buscar licencia EXISTENTE
-    lic = get_license_by_email(old_email)
+    # 🔑 BUSCAR POR LICENSE KEY, NO POR EMAIL
+    lic = get_license_by_key(license_key)
     if not lic:
         return jsonify({
             "ok": False,
-            "error": "No se encontró licencia para el email actual"
+            "error": "Licencia no encontrada"
         }), 404
 
-    # 🔒 PROTECCIÓN: no tocar plan, créditos, stripe, nada
+    # Actualizar SOLO el correo
     lic["email"] = new_email
     lic["verified"] = False  # el nuevo correo debe verificarse
 
     save_license(lic)
 
-    # ✉️ Enviar verificación SOLO al nuevo correo
+    # Enviar verificación SOLO al nuevo correo
     try:
         send_verification_email(new_email)
     except Exception as e:
-        print("Error enviando email de verificación:", e)
+        print("Error enviando email:", e)
 
     return jsonify({
         "ok": True,
@@ -1776,5 +1776,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
