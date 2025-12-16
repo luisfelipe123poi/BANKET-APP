@@ -746,6 +746,44 @@ def verify():
     return html
 
 
+@app.route("/auth/change_email", methods=["POST"])
+def change_email():
+    data = request.json or {}
+
+    old_email = (data.get("old_email") or "").strip().lower()
+    new_email = (data.get("new_email") or "").strip().lower()
+
+    if not old_email or not new_email:
+        return jsonify({
+            "ok": False,
+            "error": "old_email y new_email son requeridos"
+        }), 400
+
+    # Buscar licencia por email anterior
+    lic = get_license_by_email(old_email)
+    if not lic:
+        return jsonify({
+            "ok": False,
+            "error": "No se encontró licencia para el email actual"
+        }), 404
+
+    # Actualizar email en licencia
+    lic["email"] = new_email
+    lic["verified"] = False  # 🔥 el nuevo email debe verificarse
+
+    save_license(lic)
+
+    # Enviar verificación SOLO para el nuevo correo
+    try:
+        send_verification_email(new_email)
+    except Exception as e:
+        print("Error enviando email de verificación:", e)
+
+    return jsonify({
+        "ok": True,
+        "message": "Correo actualizado. Verificación enviada.",
+        "license": lic
+    })
 
 
 @app.route("/auth/check_status")
@@ -1734,3 +1772,4 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
