@@ -753,38 +753,56 @@ def verify():
 def change_email():
     data = request.json or {}
 
-    license_key = (data.get("license_key") or "").strip()
+    old_email = (data.get("old_email") or "").strip().lower()
     new_email = (data.get("new_email") or "").strip().lower()
 
-    if not license_key or not new_email:
+    if not old_email or not new_email:
         return jsonify({
             "ok": False,
-            "error": "license_key y new_email son requeridos"
+            "error": "old_email y new_email son requeridos"
         }), 400
 
-    # 🔑 BUSCAR POR LICENSE KEY, NO POR EMAIL
-    lic = get_license_by_key(license_key)
+    # 🔎 Buscar licencia por email anterior
+    lic = get_license_by_email(old_email)
     if not lic:
         return jsonify({
             "ok": False,
-            "error": "Licencia no encontrada"
+            "error": "No se encontró licencia para el email actual"
         }), 404
 
-    # Actualizar SOLO el correo
+    # 🧠 PROTECCIÓN CRÍTICA
+    # NO tocar plan, créditos, stripe, status
+    plan_actual = lic.get("plan")
+    credits = lic.get("credits")
+    credits_left = lic.get("credits_left")
+    stripe_customer_id = lic.get("stripe_customer_id")
+    stripe_sub_id = lic.get("stripe_subscription_id")
+    license_key = lic.get("license_key")
+
+    # 🔁 Actualizar SOLO el email
     lic["email"] = new_email
-    lic["verified"] = False  # el nuevo correo debe verificarse
+    lic["verified"] = False  # nuevo correo debe verificarse
 
-    save_license(lic)
+    # 🔐 Reaplicar campos críticos (blindaje)
+    lic["plan"] = plan_actual
+    lic["credits"] = credits
+    lic["credits_left"] = credits_left
+    lic["stripe_customer_id"] = stripe_customer_id
+    lic["stripe_subscription_id"] = stripe_sub_id
+    lic["license_key"] = license_key
 
-    # Enviar verificación SOLO al nuevo correo
+    # 💾 GUARDAR CORRECTAMENTE
+    save_license(new_email, lic)
+
+    # ✉️ Enviar verificación SOLO al nuevo correo
     try:
         send_verification_email(new_email)
     except Exception as e:
-        print("Error enviando email:", e)
+        print("Error enviando email de verificación:", e)
 
     return jsonify({
         "ok": True,
-        "message": "Correo actualizado. Verificación enviada.",
+        "message": "Correo actualizado correctamente. Verificación enviada.",
         "license": lic
     })
 
@@ -1776,6 +1794,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
