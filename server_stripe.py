@@ -1453,15 +1453,14 @@ def create_free_license():
 
 @app.route("/buy-credits", methods=["GET"])
 def buy_credits():
-    """
-    Crea una sesión de checkout para comprar packs de créditos (100, 300, 1000).
-    No requiere email previo.
-    El email definitivo se obtiene desde Stripe en el webhook.
-    """
     pack = request.args.get("pack")
+    email = request.args.get("email")  # 🔥 AHORA SÍ
 
     if pack not in ["100", "300", "1000"]:
         return jsonify({"ok": False, "error": "pack_invalido"}), 400
+
+    if not email:
+        return jsonify({"ok": False, "error": "email_requerido"}), 400
 
     PACK_PRICE_MAP = {
         "100": os.getenv("PRICE_PACK_100"),
@@ -1473,28 +1472,29 @@ def buy_credits():
     if not price_id:
         return jsonify({"ok": False, "error": "price_no_configurado"}), 500
 
-    try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            payment_method_types=["card"],
-            line_items=[{
-                "price": price_id,
-                "quantity": 1
-            }],
-            success_url=PUBLIC_DOMAIN + "/buy-credits-success",
-            cancel_url=PUBLIC_DOMAIN + "/buy-credits-cancel",
-            metadata={
-                "type": "credit_topup",   # 🔥 identifica que es top-up
-                "pack": pack,             # "100" | "300" | "1000"
-                "credits": pack           # 🔥 cantidad real a sumar
-            }
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        payment_method_types=["card"],
 
-        )
+        # 🔥 CLAVE ABSOLUTA
+        customer_email=email,
 
-        return redirect(session.url, code=302)
+        line_items=[{
+            "price": price_id,
+            "quantity": 1
+        }],
+        metadata={
+            "type": "credit_topup",
+            "pack": pack,
+            "credits": pack,
+            "email": email
+        },
+        success_url=PUBLIC_DOMAIN + "/buy-credits-success",
+        cancel_url=PUBLIC_DOMAIN + "/buy-credits-cancel"
+    )
 
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    return redirect(session.url, code=302)
+
 
 
 @app.route("/ads/banner", methods=["GET"])
@@ -1732,6 +1732,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
