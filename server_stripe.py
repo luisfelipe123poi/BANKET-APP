@@ -323,7 +323,39 @@ def gen_license():
     return "LIC-" + uuid.uuid4().hex.upper()
 
 def now_iso():
-    return datetime.utcnow().isoformat()
+    return datetime.utcnow().isoformat
+
+def add_credits_to_license(email, extra_credits):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Obtener licencia más reciente
+    cur.execute(
+        "SELECT license_key, credits, credits_left FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1",
+        (email,)
+    )
+    lic = cur.fetchone()
+
+    if not lic:
+        conn.close()
+        return False, "Licencia no encontrada"
+
+    new_credits = (lic["credits"] or 0) + extra_credits
+    new_credits_left = (lic["credits_left"] or 0) + extra_credits
+
+    cur.execute(
+        """
+        UPDATE licenses
+        SET credits = ?, credits_left = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE license_key = ?
+        """,
+        (new_credits, new_credits_left, lic["license_key"])
+    )
+
+    conn.commit()
+    conn.close()
+    return True, new_credits_left
+    
 
 
 
@@ -1226,29 +1258,43 @@ def webhook():
             conn.commit()
             conn.close()
 
-        # 🟦 PAGOS ÚNICOS (PACKS)
+        # 🟦 PAGOS ÚNICOS (PACKS DE CRÉDITOS)
         elif session.get("mode") == "payment":
             email = session.get("customer_email")
-            pack = session.get("metadata", {}).get("pack")
+            metadata = session.get("metadata", {})
 
-            print("🟦 Pago único detectado → pack:", pack)
+            pack = metadata.get("pack")
+            credits_to_add = metadata.get("credits") or pack
 
-            if email and pack:
+            print("🟦 Pago único detectado → pack:", pack, "credits:", credits_to_add)
+
+            if email and credits_to_add:
                 lic = get_license_by_email(email)
+
                 if lic:
-                    extra = int(pack)
-                    new_total = lic["credits_left"] + extra
+                    extra = int(credits_to_add)
+
+                    new_credits = (lic["credits"] or 0) + extra
+                    new_credits_left = (lic["credits_left"] or 0) + extra
 
                     conn = get_db_connection()
                     cur = conn.cursor()
                     cur.execute(
-                        "UPDATE licenses SET credits_left = ? WHERE license_key = ?",
-                        (new_total, lic["license_key"])
+                        """
+                        UPDATE licenses 
+                        SET credits = ?, credits_left = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE license_key = ?
+                        """,
+                        (new_credits, new_credits_left, lic["license_key"])
                     )
                     conn.commit()
                     conn.close()
 
-                    print(f"🟩 Créditos sumados: +{extra} → {email}")
+                    print(f"🟩 Créditos sumados correctamente: +{extra} → {email}")
+                else:
+                    print("❌ Pago recibido pero no existe licencia para:", email)
+
+
 
     # ============================================================
     # OTROS EVENTOS → IGNORAR PERO RESPONDER OK
@@ -1438,8 +1484,11 @@ def buy_credits():
             success_url=PUBLIC_DOMAIN + "/buy-credits-success",
             cancel_url=PUBLIC_DOMAIN + "/buy-credits-cancel",
             metadata={
-                "pack": pack
+                "type": "credit_topup",   # 🔥 identifica que es top-up
+                "pack": pack,             # "100" | "300" | "1000"
+                "credits": pack           # 🔥 cantidad real a sumar
             }
+
         )
 
         return redirect(session.url, code=302)
@@ -1683,6 +1732,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
