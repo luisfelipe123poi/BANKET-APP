@@ -1053,6 +1053,30 @@ def validate_license():
     })
 
 
+@app.route("/license/by-email", methods=["POST"])
+def license_by_email():
+    data = request.get_json() or {}
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "email_required"}), 400
+
+    lic = get_license_by_email(email)
+
+    if not lic:
+        return jsonify({"exists": False}), 200
+
+    return jsonify({
+        "exists": True,
+        "license": {
+            "license_key": lic["license_key"],
+            "email": lic["email"],
+            "plan": lic["plan"],
+            "credits": lic["credits"],
+            "credits_left": lic["credits_left"],
+            "status": lic["status"]
+        }
+    }), 200
 
 
 @app.route("/license/redeem", methods=["POST"])
@@ -1748,6 +1772,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
