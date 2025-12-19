@@ -115,7 +115,7 @@ def generar_token():
 def sign_token(email):
     exp = int(time.time()) + 60  # 1 min
     token = jwt.encode({"email": email, "exp": exp}, SECRET_KEY, algorithm="HS256")
-    return token, exp
+return token, exp
 
 
 def enviar_correo_verificacion(email, token):
@@ -1772,6 +1772,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
