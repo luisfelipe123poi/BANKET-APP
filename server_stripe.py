@@ -1653,6 +1653,18 @@ def success():
     """
     return html
 
+@app.route("/app/version", methods=["GET"])
+def app_version():
+    return jsonify({
+        "version": "1.3.1",
+        "mandatory": False,
+        "url": "https://tuservidor.com/downloads/TurboClips.exe",
+        "changelog": [
+            "Mejoras de rendimiento",
+            "Corrección de errores de subtítulos",
+            "Auto-update agregado"
+        ]
+    })
 
 
 @app.route("/cancel")
@@ -1772,6 +1784,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
