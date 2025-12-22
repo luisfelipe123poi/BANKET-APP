@@ -260,6 +260,18 @@ def init_db():
         );
     """)
 
+    # -----------------------------------------
+    # Tabla de dispositivos por licencia
+    # -----------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS license_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            license_key TEXT,
+            device_id TEXT,
+            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
 
     # -----------------------------------------
     # Tabla de tokens para verificación de email
@@ -848,6 +860,50 @@ def get_license_by_email(email):
 
     return lic
 
+def get_devices_for_license(license_key):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM license_devices WHERE license_key = ? ORDER BY last_seen ASC",
+        (license_key,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def register_device(license_key, device_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO license_devices (license_key, device_id, last_seen)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(device_id) DO UPDATE SET last_seen = CURRENT_TIMESTAMP
+    """, (license_key, device_id))
+
+    conn.commit()
+    conn.close()
+
+
+def remove_oldest_device(license_key):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        DELETE FROM license_devices
+        WHERE id = (
+            SELECT id FROM license_devices
+            WHERE license_key = ?
+            ORDER BY last_seen ASC
+            LIMIT 1
+        )
+    """, (license_key,))
+
+    conn.commit()
+    conn.close()
+
+
 def get_license_by_ip(ip):
     """
     Return the first license that has metadata.ip == ip (or None).
@@ -943,6 +999,9 @@ def create_portal_session():
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
     data = request.get_json() or {}
+    device_id = data.get("device_id")
+    force_replace = data.get("force_replace", False)
+
 
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
@@ -957,6 +1016,31 @@ def validate_license():
 
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
+
+    # ============================
+    # 🔒 CONTROL DE DISPOSITIVOS
+    # ============================
+    if device_id:
+        devices = get_devices_for_license(lic["license_key"])
+        max_allowed = max_devices_for_plan(lic.get("plan", "free"))
+
+        already_registered = any(d["device_id"] == device_id for d in devices)
+
+        if not already_registered:
+            if len(devices) >= max_allowed:
+                if not force_replace:
+                    return jsonify({
+                        "valid": False,
+                        "reason": "device_limit",
+                        "max_devices": max_allowed
+                    })
+
+                # 🔥 liberar el más antiguo
+                remove_oldest_device(lic["license_key"])
+
+            # registrar dispositivo nuevo
+            register_device(lic["license_key"], device_id)
+
 
     # ---------------------------------------------------
     # Convertir Row → dict SIEMPRE
@@ -1784,6 +1868,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
