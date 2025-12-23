@@ -875,6 +875,23 @@ def get_license_by_email(email):
 
     return lic
 
+def save_license_metadata(license_key, metadata):
+    """
+    Guarda metadata (JSON) en la licencia.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE licenses
+        SET metadata = ?
+        WHERE license_key = ?
+    """, (json.dumps(metadata), license_key))
+
+    conn.commit()
+    conn.close()
+
+
 def max_devices_for_plan(plan: str) -> int:
     """
     Retorna el número máximo de dispositivos permitidos por plan.
