@@ -1671,7 +1671,9 @@ def remove_device():
         if not fingerprint:
             return jsonify({"ok": False, "reason": "missing_fingerprint"}), 400
 
+        # ---------------------------------------------------
         # Buscar licencia
+        # ---------------------------------------------------
         if license_key:
             lic = get_license_by_key(license_key)
         elif email:
@@ -1686,18 +1688,38 @@ def remove_device():
         if not isinstance(lic, dict):
             lic = dict(lic)
 
+        # ---------------------------------------------------
+        # Metadata segura
+        # ---------------------------------------------------
         metadata = lic.get("metadata") or {}
-        devices = metadata.get("devices", [])
 
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {}
+
+        devices = metadata.get("devices", [])
+        if not isinstance(devices, list):
+            devices = []
+
+        # ---------------------------------------------------
+        # Eliminar dispositivo
+        # ---------------------------------------------------
         before = len(devices)
-        devices = [d for d in devices if d.get("fingerprint") != fingerprint]
+        devices = [
+            d for d in devices
+            if d.get("fingerprint") and d.get("fingerprint") != fingerprint
+        ]
 
         if len(devices) == before:
             return jsonify({"ok": False, "reason": "device_not_found"}), 404
 
         metadata["devices"] = devices
 
-        # 🔒 Guardar metadata directamente en DB
+        # ---------------------------------------------------
+        # Guardar metadata en DB
+        # ---------------------------------------------------
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
@@ -1708,7 +1730,11 @@ def remove_device():
         conn.commit()
         conn.close()
 
-        return jsonify({"ok": True, "removed": fingerprint})
+        return jsonify({
+            "ok": True,
+            "removed": fingerprint,
+            "devices": devices
+        })
 
     except Exception as e:
         print("🔥 ERROR /license/devices/remove:", e)
