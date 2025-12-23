@@ -178,14 +178,9 @@ def get_db_connection():
     return conn
 
 def find_license(email=None, license_key=None):
-    """
-    Busca una licencia por email o license_key.
-    Devuelve el dict de licencia o None.
-    """
-    if not email and not license_key:
-        return None
+    licenses = load_licenses()
 
-    for lic in LICENSES_DB.values():
+    for lic in licenses.values():
         if email and lic.get("email") == email:
             return lic
         if license_key and lic.get("license_key") == license_key:
