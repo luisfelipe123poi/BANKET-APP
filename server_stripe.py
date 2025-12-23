@@ -177,6 +177,23 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def find_license(email=None, license_key=None):
+    """
+    Busca una licencia por email o license_key.
+    Devuelve el dict de licencia o None.
+    """
+    if not email and not license_key:
+        return None
+
+    for lic in LICENSES_DB.values():
+        if email and lic.get("email") == email:
+            return lic
+        if license_key and lic.get("license_key") == license_key:
+            return lic
+
+    return None
+
+
 def save_license(
     license_key,
     email,
