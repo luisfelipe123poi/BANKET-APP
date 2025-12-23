@@ -1032,30 +1032,41 @@ def validate_license():
     if not lic:
         return jsonify({"valid": False, "reason": "not_found"}), 404
 
-    # ============================
-    # 🔒 CONTROL DE DISPOSITIVOS
-    # ============================
-    if device_id:
-        devices = get_devices_for_license(lic["license_key"])
-        max_allowed = max_devices_for_plan(lic.get("plan", "free"))
+    # ---------------------------------------------------
+    # 🔒 CONTROL DE DISPOSITIVOS (ÚNICO SISTEMA)
+    # ---------------------------------------------------
+    metadata = lic.get("metadata") or {}
+    devices = metadata.get("devices", [])
 
-        already_registered = any(d["device_id"] == device_id for d in devices)
+    max_allowed = max_devices_for_plan(lic.get("plan", "free"))
 
-        if not already_registered:
-            if len(devices) >= max_allowed:
-                if not force_replace:
-                    return jsonify({
-                        "valid": False,
-                        "reason": "device_limit",
-                        "max_devices": max_allowed
-                    })
+    exists = any(d.get("fingerprint") == fingerprint for d in devices)
 
-                # 🔥 liberar el más antiguo
-                remove_oldest_device(lic["license_key"])
+    if not exists:
+        if len(devices) >= max_allowed:
+            if not force_replace:
+                return jsonify({
+                    "valid": False,
+                    "reason": "device_limit",
+                    "max_devices": max_allowed,
+                    "devices": devices
+                })
 
-            # registrar dispositivo nuevo
-            register_device(lic["license_key"], device_id)
+            # 🔥 liberar el más antiguo
+            devices.sort(key=lambda d: d.get("registered_at"))
+            devices.pop(0)
 
+        devices.append({
+            "fingerprint": fingerprint,
+            "registered_at": datetime.utcnow().isoformat(),
+            "label": data.get("device_name", "Este dispositivo")
+        })
+
+        metadata["devices"] = devices
+        save_license_metadata(
+            license_key=lic["license_key"],
+            metadata=metadata
+        )
 
     # ---------------------------------------------------
     # Convertir Row → dict SIEMPRE
