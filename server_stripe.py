@@ -875,6 +875,25 @@ def get_license_by_email(email):
 
     return lic
 
+def max_devices_for_plan(plan: str) -> int:
+    """
+    Retorna el número máximo de dispositivos permitidos por plan.
+    """
+    plan = (plan or "free").lower()
+
+    if plan == "free":
+        return 1
+    if plan == "starter":
+        return 1
+    if plan == "pro":
+        return 2
+    if plan == "agency":
+        return 5
+
+    # fallback seguro
+    return 1
+
+
 def get_devices_for_license(license_key):
     conn = get_db_connection()
     cur = conn.cursor()
