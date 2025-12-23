@@ -177,21 +177,6 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def find_license(email=None, license_key=None):
-    """
-    Busca licencia por email o license_key usando la BD.
-    """
-    licenses = load_all_licenses()
-
-    for lic in licenses:
-        if email and lic.get("email") == email:
-            return lic
-        if license_key and lic.get("license_key") == license_key:
-            return lic
-
-    return None
-
-
 def save_license(
     license_key,
     email,
@@ -272,18 +257,6 @@ def init_db():
             credits INTEGER DEFAULT 0,
             credits_left INTEGER DEFAULT 0
 
-        );
-    """)
-
-    # -----------------------------------------
-    # Tabla de dispositivos por licencia
-    # -----------------------------------------
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS license_devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            license_key TEXT,
-            device_id TEXT,
-            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
 
@@ -875,86 +848,6 @@ def get_license_by_email(email):
 
     return lic
 
-def save_license_metadata(license_key, metadata):
-    """
-    Guarda metadata (JSON) en la licencia.
-    """
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        UPDATE licenses
-        SET metadata = ?
-        WHERE license_key = ?
-    """, (json.dumps(metadata), license_key))
-
-    conn.commit()
-    conn.close()
-
-
-def max_devices_for_plan(plan: str) -> int:
-    """
-    Retorna el número máximo de dispositivos permitidos por plan.
-    """
-    plan = (plan or "free").lower()
-
-    if plan == "free":
-        return 1
-    if plan == "starter":
-        return 1
-    if plan == "pro":
-        return 2
-    if plan == "agency":
-        return 5
-
-    # fallback seguro
-    return 1
-
-
-def get_devices_for_license(license_key):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM license_devices WHERE license_key = ? ORDER BY last_seen ASC",
-        (license_key,)
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def register_device(license_key, device_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        INSERT INTO license_devices (license_key, device_id, last_seen)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(device_id) DO UPDATE SET last_seen = CURRENT_TIMESTAMP
-    """, (license_key, device_id))
-
-    conn.commit()
-    conn.close()
-
-
-def remove_oldest_device(license_key):
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        DELETE FROM license_devices
-        WHERE id = (
-            SELECT id FROM license_devices
-            WHERE license_key = ?
-            ORDER BY last_seen ASC
-            LIMIT 1
-        )
-    """, (license_key,))
-
-    conn.commit()
-    conn.close()
-
-
 def get_license_by_ip(ip):
     """
     Return the first license that has metadata.ip == ip (or None).
@@ -1049,155 +942,115 @@ def create_portal_session():
 
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
-    try:
-        data = request.get_json() or {}
-        fingerprint = data.get("fingerprint")
+    data = request.get_json() or {}
 
-        device_id = data.get("device_id")
-        force_replace = data.get("force_replace", False)
+    key = data.get("license_key") or data.get("key")
+    email = data.get("email")
 
-        key = data.get("license_key") or data.get("key")
-        email = data.get("email")
+    # ---------------------------------------------------
+    # Obtener licencia por key o email
+    # ---------------------------------------------------
+    if email and not key:
+        lic = get_license_by_email(email)
+    else:
+        lic = get_license_by_key(key)
 
-        # ---------------------------------------------------
-        # Obtener licencia por key o email
-        # ---------------------------------------------------
-        if email and not key:
-            lic = get_license_by_email(email)
-        else:
-            lic = get_license_by_key(key)
+    if not lic:
+        return jsonify({"valid": False, "reason": "not_found"}), 404
 
-        if not lic:
-            return jsonify({"valid": False, "reason": "not_found"}), 404
+    # ---------------------------------------------------
+    # Convertir Row → dict SIEMPRE
+    # ---------------------------------------------------
+    if not isinstance(lic, dict):
+        lic = dict(lic)
 
-        # ---------------------------------------------------
-        # 🔒 CONTROL DE DISPOSITIVOS (ÚNICO SISTEMA)
-        # ---------------------------------------------------
-        metadata = lic.get("metadata") or {}
-        devices = metadata.get("devices", [])
+    # ============================================================
+    # SINCRONIZACIÓN REAL CON STRIPE
+    # ============================================================
+    if lic.get("stripe_subscription_id"):
+        try:
+            sub = stripe.Subscription.retrieve(lic["stripe_subscription_id"])
 
-        max_allowed = max_devices_for_plan(lic.get("plan", "free"))
+            price_id = sub["items"]["data"][0]["price"]["id"]
+            status = sub["status"]
 
-        exists = any(d.get("fingerprint") == fingerprint for d in devices)
+            # Mapear plan
+            plan_map = {
+                PRICE_ID_STARTER: "starter",
+                PRICE_ID_PRO: "pro",
+                PRICE_ID_AGENCY: "agency",
+                PRICE_ID_STARTER_ANNUAL: "starter",
+                PRICE_ID_PRO_ANNUAL: "pro",
+                PRICE_ID_AGENCY_ANNUAL: "agency"
+            }
 
-        if not exists:
-            if len(devices) >= max_allowed:
-                if not force_replace:
-                    return jsonify({
-                        "valid": False,
-                        "reason": "device_limit",
-                        "max_devices": max_allowed,
-                        "devices": devices
-                    })
+            new_plan = plan_map.get(price_id, lic["plan"])
 
-                # 🔥 liberar el más antiguo
-                devices.sort(key=lambda d: d.get("registered_at"))
-                devices.pop(0)
+            credits_map = {
+                "starter": 100,
+                "pro": 300,
+                "agency": 1200,
+                "free": 10
+            }
 
-            devices.append({
-                "fingerprint": fingerprint,
-                "registered_at": datetime.utcnow().isoformat(),
-                "label": data.get("device_name", "Este dispositivo")
-            })
+            new_credits = credits_map[new_plan]
 
-            metadata["devices"] = devices
-            save_license_metadata(
-                license_key=lic["license_key"],
-                metadata=metadata
-            )
+            # Mantener créditos usados siempre
+            credits_left = lic.get("credits_left", new_credits)
 
-        # ---------------------------------------------------
-        # Convertir Row → dict SIEMPRE
-        # ---------------------------------------------------
-        if not isinstance(lic, dict):
-            lic = dict(lic)
-
-        # ============================================================
-        # SINCRONIZACIÓN REAL CON STRIPE
-        # ============================================================
-        if lic.get("stripe_subscription_id"):
-            try:
-                sub = stripe.Subscription.retrieve(lic["stripe_subscription_id"])
-
-                price_id = sub["items"]["data"][0]["price"]["id"]
-                status = sub["status"]
-
-                plan_map = {
-                    PRICE_ID_STARTER: "starter",
-                    PRICE_ID_PRO: "pro",
-                    PRICE_ID_AGENCY: "agency",
-                    PRICE_ID_STARTER_ANNUAL: "starter",
-                    PRICE_ID_PRO_ANNUAL: "pro",
-                    PRICE_ID_AGENCY_ANNUAL: "agency"
-                }
-
-                new_plan = plan_map.get(price_id, lic["plan"])
-
-                credits_map = {
-                    "starter": 100,
-                    "pro": 300,
-                    "agency": 1200,
-                    "free": 10
-                }
-
-                new_credits = credits_map[new_plan]
-                credits_left = lic.get("credits_left", new_credits)
-
-                if status not in ("active", "trialing"):
-                    lic["status"] = "inactive"
-
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute("""
-                        UPDATE licenses SET status='inactive'
-                        WHERE license_key=?
-                    """, (lic["license_key"],))
-                    conn.commit()
-                    conn.close()
-
-                    return jsonify({"valid": False, "reason": "inactive"})
+            # Si la suscripción está cancelada / pausada / vencida
+            if status not in ("active", "trialing"):
+                lic["status"] = "inactive"
 
                 conn = get_db_connection()
                 cur = conn.cursor()
                 cur.execute("""
                     UPDATE licenses SET 
-                        plan=?, credits=?, credits_left=?, status=?
+                        status='inactive'
                     WHERE license_key=?
-                """, (new_plan, new_credits, credits_left, status, lic["license_key"]))
+                """, (lic["license_key"],))
                 conn.commit()
                 conn.close()
 
-                lic["plan"] = new_plan
-                lic["credits"] = new_credits
-                lic["credits_left"] = credits_left
-                lic["status"] = status
+                return jsonify({"valid": False, "reason": "inactive"})
 
-            except Exception as e:
-                print("⚠️ Stripe sync error:", e)
+            # Guardar actualización normal
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE licenses SET 
+                    plan=?, 
+                    credits=?, 
+                    credits_left=?, 
+                    status=?
+                WHERE license_key=?
+            """, (new_plan, new_credits, credits_left, status, lic["license_key"]))
+            conn.commit()
+            conn.close()
 
-        # ============================================================
-        # RESPUESTA FINAL (SIEMPRE JSON)
-        # ============================================================
-        return jsonify({
-            "valid": True,
-            "license": {
-                "license_key": lic["license_key"],
-                "email": lic.get("email"),
-                "plan": lic.get("plan", "free"),
-                "status": lic.get("status", "active"),
-                "credits": lic.get("credits", 0),
-                "credits_left": lic.get("credits_left", 0)
-            }
-        })
+            # Actualizar en memoria
+            lic["plan"] = new_plan
+            lic["credits"] = new_credits
+            lic["credits_left"] = credits_left
+            lic["status"] = status
 
-    except Exception as e:
-        # 🔥 AQUÍ SE SOLUCIONA EL ERROR 3
-        print("🔥 ERROR /license/validate:", e)
-        return jsonify({
-            "valid": False,
-            "reason": "internal_error",
-            "message": str(e)
-        }), 500
+        except Exception as e:
+            print("⚠️ Stripe sync error:", e)
+
+    # ============================================================
+    # RESPUESTA
+    # ============================================================
+    return jsonify({
+        "valid": True,
+        "license": {
+            "license_key": lic["license_key"],
+            "email": lic.get("email"),
+            "plan": lic.get("plan", "free"),
+            "status": lic.get("status", "active"),
+            "credits": lic.get("credits", 0),
+            "credits_left": lic.get("credits_left", 0)
+        }
+    })
 
 
 @app.route("/license/by-email", methods=["POST"])
@@ -1637,109 +1490,6 @@ def create_free_license():
         "message": "Licencia free creada correctamente.",
         "license": new_license
     })
-
-@app.route("/license/devices", methods=["POST"])
-def get_license_devices():
-    data = request.json or {}
-
-    email = data.get("email")
-    license_key = data.get("license_key")
-
-    lic = find_license(email=email, license_key=license_key)
-    if not lic:
-        return jsonify({"ok": False, "error": "license_not_found"}), 404
-
-    # 2️⃣ 👇 AQUÍ VA EXACTAMENTE ESTA LÍNEA
-    devices = lic.get("metadata", {}).get("devices", [])
-
-
-    return jsonify({
-        "ok": True,
-        "devices": devices,
-        "limit": lic.get("device_limit", 1)
-    })
-
-@app.route("/license/devices/remove", methods=["POST"])
-def remove_device():
-    try:
-        data = request.get_json() or {}
-
-        fingerprint = data.get("fingerprint")
-        email = data.get("email")
-        license_key = data.get("license_key")
-
-        if not fingerprint:
-            return jsonify({"ok": False, "reason": "missing_fingerprint"}), 400
-
-        # ---------------------------------------------------
-        # Buscar licencia
-        # ---------------------------------------------------
-        if license_key:
-            lic = get_license_by_key(license_key)
-        elif email:
-            lic = get_license_by_email(email)
-        else:
-            return jsonify({"ok": False, "reason": "missing_identifier"}), 400
-
-        if not lic:
-            return jsonify({"ok": False, "reason": "license_not_found"}), 404
-
-        # Asegurar dict
-        if not isinstance(lic, dict):
-            lic = dict(lic)
-
-        # ---------------------------------------------------
-        # Metadata segura
-        # ---------------------------------------------------
-        metadata = lic.get("metadata") or {}
-
-        if isinstance(metadata, str):
-            try:
-                metadata = json.loads(metadata)
-            except Exception:
-                metadata = {}
-
-        devices = metadata.get("devices", [])
-        if not isinstance(devices, list):
-            devices = []
-
-        # ---------------------------------------------------
-        # Eliminar dispositivo
-        # ---------------------------------------------------
-        before = len(devices)
-        devices = [
-            d for d in devices
-            if d.get("fingerprint") and d.get("fingerprint") != fingerprint
-        ]
-
-        if len(devices) == before:
-            return jsonify({"ok": False, "reason": "device_not_found"}), 404
-
-        metadata["devices"] = devices
-
-        # ---------------------------------------------------
-        # Guardar metadata en DB
-        # ---------------------------------------------------
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE licenses
-            SET metadata=?
-            WHERE license_key=?
-        """, (json.dumps(metadata), lic["license_key"]))
-        conn.commit()
-        conn.close()
-
-        return jsonify({
-            "ok": True,
-            "removed": fingerprint,
-            "devices": devices
-        })
-
-    except Exception as e:
-        print("🔥 ERROR /license/devices/remove:", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
-
 
 @app.route("/buy-credits", methods=["GET"])
 def buy_credits():
