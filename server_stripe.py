@@ -178,9 +178,12 @@ def get_db_connection():
     return conn
 
 def find_license(email=None, license_key=None):
-    licenses = load_licenses()
+    """
+    Busca licencia por email o license_key usando la BD.
+    """
+    licenses = load_all_licenses()
 
-    for lic in licenses.values():
+    for lic in licenses:
         if email and lic.get("email") == email:
             return lic
         if license_key and lic.get("license_key") == license_key:
@@ -1598,7 +1601,9 @@ def get_license_devices():
     if not lic:
         return jsonify({"ok": False, "error": "license_not_found"}), 404
 
-    devices = lic.get("devices", [])
+    # 2️⃣ 👇 AQUÍ VA EXACTAMENTE ESTA LÍNEA
+    devices = lic.get("metadata", {}).get("devices", [])
+
 
     return jsonify({
         "ok": True,
