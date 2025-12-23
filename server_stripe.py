@@ -1575,6 +1575,46 @@ def create_free_license():
         "license": new_license
     })
 
+@app.route("/license/devices", methods=["POST"])
+def get_license_devices():
+    data = request.json or {}
+
+    email = data.get("email")
+    license_key = data.get("license_key")
+
+    lic = find_license(email=email, license_key=license_key)
+    if not lic:
+        return jsonify({"ok": False, "error": "license_not_found"}), 404
+
+    devices = lic.get("devices", [])
+
+    return jsonify({
+        "ok": True,
+        "devices": devices,
+        "limit": lic.get("device_limit", 1)
+    })
+
+@app.route("/license/devices/remove", methods=["POST"])
+def remove_device():
+    data = request.json or {}
+
+    email = data.get("email")
+    license_key = data.get("license_key")
+    fingerprint = data.get("fingerprint")
+
+    lic = find_license(email=email, license_key=license_key)
+    if not lic:
+        return jsonify({"ok": False, "error": "license_not_found"}), 404
+
+    devices = lic.get("devices", [])
+    devices = [d for d in devices if d["fingerprint"] != fingerprint]
+
+    lic["devices"] = devices
+    save_license(lic)
+
+    return jsonify({"ok": True})
+
+
 @app.route("/buy-credits", methods=["GET"])
 def buy_credits():
     pack = request.args.get("pack")
