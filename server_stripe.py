@@ -1661,23 +1661,58 @@ def get_license_devices():
 
 @app.route("/license/devices/remove", methods=["POST"])
 def remove_device():
-    data = request.json or {}
+    try:
+        data = request.get_json() or {}
 
-    email = data.get("email")
-    license_key = data.get("license_key")
-    fingerprint = data.get("fingerprint")
+        fingerprint = data.get("fingerprint")
+        email = data.get("email")
+        license_key = data.get("license_key")
 
-    lic = find_license(email=email, license_key=license_key)
-    if not lic:
-        return jsonify({"ok": False, "error": "license_not_found"}), 404
+        if not fingerprint:
+            return jsonify({"ok": False, "reason": "missing_fingerprint"}), 400
 
-    devices = lic.get("devices", [])
-    devices = [d for d in devices if d["fingerprint"] != fingerprint]
+        # Buscar licencia
+        if license_key:
+            lic = get_license_by_key(license_key)
+        elif email:
+            lic = get_license_by_email(email)
+        else:
+            return jsonify({"ok": False, "reason": "missing_identifier"}), 400
 
-    lic["devices"] = devices
-    save_license(lic)
+        if not lic:
+            return jsonify({"ok": False, "reason": "license_not_found"}), 404
 
-    return jsonify({"ok": True})
+        # Asegurar dict
+        if not isinstance(lic, dict):
+            lic = dict(lic)
+
+        metadata = lic.get("metadata") or {}
+        devices = metadata.get("devices", [])
+
+        before = len(devices)
+        devices = [d for d in devices if d.get("fingerprint") != fingerprint]
+
+        if len(devices) == before:
+            return jsonify({"ok": False, "reason": "device_not_found"}), 404
+
+        metadata["devices"] = devices
+
+        # 🔒 Guardar metadata directamente en DB
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE licenses
+            SET metadata=?
+            WHERE license_key=?
+        """, (json.dumps(metadata), lic["license_key"]))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"ok": True, "removed": fingerprint})
+
+    except Exception as e:
+        print("🔥 ERROR /license/devices/remove:", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/buy-credits", methods=["GET"])
