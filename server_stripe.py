@@ -481,31 +481,26 @@ def create_free_license_internal(email):
     """
     Crea una licencia FREE cuando un usuario verifica su correo.
     Si ya existe una licencia (free o de pago), NO crea otra.
-    Devuelve también si fue creada en este momento.
+    Solo devuelve la licencia existente.
     """
     email = email.strip().lower()
 
     # 🔍 1. Revisar si ya existe una licencia previa por email
     existing = get_license_by_email(email)
     if existing:
+        # → Si ya existe, NO crear una nueva
         print(f"⚠️ Licencia ya existente encontrada para {email}: {existing['license_key']}")
         return {
             "ok": True,
-            "license_created": False,   # 👈 CLAVE
-            "license": {
-                "license_key": existing["license_key"],
-                "email": existing["email"],
-                "plan": existing["plan"],
-                "credits": existing.get(
-                    "credits_left",
-                    existing.get("credits", 0)
-                )
-            }
+            "license_key": existing["license_key"],
+            "email": existing["email"],
+            "plan": existing["plan"],
+            "credits": existing.get("credits_left", existing.get("credits", 0))
         }
 
     # 🆕 2. Si no existe licencia, crear una nueva FREE
     license_key = gen_license()
-    credits = 10
+    credits = 10  # créditos del plan free
 
     save_license(
         license_key=license_key,
@@ -523,13 +518,10 @@ def create_free_license_internal(email):
 
     return {
         "ok": True,
-        "license_created": True,   # 👈 CLAVE
-        "license": {
-            "license_key": license_key,
-            "email": email,
-            "plan": "free",
-            "credits": credits
-        }
+        "license_key": license_key,
+        "email": email,
+        "plan": "free",
+        "credits": credits
     }
 
 @app.route("/auth/request_code", methods=["POST"])
@@ -769,34 +761,31 @@ def check_status():
 
     email = email.strip().lower()
 
-    # 1️⃣ Verificar si el email ya fue confirmado
+    # Verificar si el email ya fue confirmado
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT used FROM email_verification_tokens WHERE email = ?",
-        (email,)
-    )
+    cur.execute("SELECT used FROM email_verification_tokens WHERE email = ?", (email,))
     row = cur.fetchone()
     conn.close()
 
-    verified = bool(row and row["used"] == 1)
+    verified = False
+    if row and row["used"] == 1:
+        verified = True
 
-    license_created = False
-    license_obj = None
+    # Buscar la licencia
+    lic = get_license_by_email(email)
 
-    # 2️⃣ SI YA ESTÁ VERIFICADO → crear o recuperar licencia
-    if verified:
-        result = create_free_license_internal(email)
-        license_created = result.get("license_created", False)
-        license_obj = result.get("license")
-
-    # 3️⃣ RESPUESTA FINAL (FUENTE DE VERDAD)
     return jsonify({
         "ok": True,
         "verified": verified,
         "email": email,
-        "license_created": license_created,
-        "license": license_obj
+        "license": {
+            "license_key": lic.get("license_key") if lic else None,
+            "plan": lic.get("plan") if lic else None,
+            "credits": lic.get("credits") if lic else None,
+            "credits_left": lic.get("credits_left") if lic else None,
+            "status": lic.get("status") if lic else None
+        }
     })
 
 
