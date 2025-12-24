@@ -942,7 +942,8 @@ def create_portal_session():
 
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
+
 
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
@@ -956,7 +957,7 @@ def validate_license():
         lic = get_license_by_key(key)
 
     if not lic:
-        return jsonify({"valid": False, "reason": "not_found"}), 404
+        return jsonify({"valid": False, "reason": "not_found"}), 200
 
     # ---------------------------------------------------
     # Convertir Row → dict SIEMPRE
@@ -1012,7 +1013,7 @@ def validate_license():
                 conn.commit()
                 conn.close()
 
-                return jsonify({"valid": False, "reason": "inactive"})
+                return jsonify({"valid": False, "reason": "inactive"}), 200
 
             # Guardar actualización normal
             conn = get_db_connection()
