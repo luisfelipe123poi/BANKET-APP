@@ -1182,10 +1182,12 @@ def post_usage():
 
     # Ensure license exists
     lic = get_license_by_key(key)
-    plan = (lic.get("plan") or "").lower()
+    
 
     if not lic:
         return jsonify({"error": "license_not_found"}), 404
+
+    plan = (lic.get("plan") or "").lower()    
 
     # If license status not active, reject
     if lic.get("status") not in ("active", "trialing"):
@@ -1203,11 +1205,17 @@ def post_usage():
     
 
     # Decrement credits atomically
-    new_left = adjust_credits_left(key, -cost)
-    if new_left is None:
-        return jsonify({"error": "db_error"}), 500
+    # ♾️ PRO / AGENCY + audio subido → NO descontar
+    if plan in ("pro", "agency") and modo == "audio_upload":
+        return jsonify({
+            "ok": True,
+            "credits_left": lic.get("credits_left"),
+            "unlimited": True,
+            "action": action
+        })
 
-    return jsonify({"ok": True, "credits_left": new_left, "action": action})
+    new_left = adjust_credits_left(key, -cost)
+
 
 # -------------------------
 # Webhook handling
