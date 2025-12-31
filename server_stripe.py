@@ -186,13 +186,14 @@ def debug_metrics():
     cur = conn.cursor()
     cur.execute("""
         SELECT 
-            DATE(created_at) as dia,
-            COUNT(*) as total,
-            SUM(event='success') as exitos,
-            SUM(event='error') as errores
+           DATE(created_at) as dia,
+           SUM(event = 'generation_start') as total,
+           SUM(event = 'success') as exitos,
+           SUM(event = 'error') as errores
         FROM metrics
         GROUP BY dia
         ORDER BY dia DESC
+
     """)
     rows = cur.fetchall()
     conn.close()
@@ -1895,6 +1896,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
