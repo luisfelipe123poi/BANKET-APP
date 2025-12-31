@@ -17,6 +17,8 @@ import time
 from flask import redirect
 
 
+
+
 import os
 import sib_api_v3_sdk
 from sib_api_v3_sdk import Configuration, ApiClient, TransactionalEmailsApi
@@ -30,6 +32,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Ruta absoluta hacia la base de datos SQLite
 DB_PATH = os.path.join(BASE_DIR, "stripe_licenses.db")
+
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -177,6 +180,26 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+@app.route("/_debug/metrics", methods=["GET"])
+def debug_metrics():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 
+            DATE(created_at) as dia,
+            COUNT(*) as total,
+            SUM(event='success') as exitos,
+            SUM(event='error') as errores
+        FROM metrics
+        GROUP BY dia
+        ORDER BY dia DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    return jsonify([dict(r) for r in rows])
+
+
 def save_license(
     license_key,
     email,
@@ -260,6 +283,18 @@ def init_db():
         );
     """)
 
+    # -----------------------------
+    # Tabla de métricas
+    # -----------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            event TEXT,
+            error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
     # -----------------------------------------
     # Tabla de tokens para verificación de email
@@ -871,6 +906,58 @@ def get_license_by_device(device_id):
             return lic
     return None
 
+
+@app.route("/metrics/generation-start", methods=["POST"])
+def metric_generation_start():
+    data = request.get_json() or {}
+    email = data.get("email")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO metrics (email, event) VALUES (?, ?)",
+        (email, "start")
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
+
+@app.route("/metrics/generation-success", methods=["POST"])
+def metric_generation_success():
+    data = request.get_json() or {}
+    email = data.get("email")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO metrics (email, event) VALUES (?, ?)",
+        (email, "success")
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
+
+@app.route("/metrics/generation-error", methods=["POST"])
+def metric_generation_error():
+    data = request.get_json() or {}
+    email = data.get("email")
+    error = data.get("error")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO metrics (email, event, error) VALUES (?, ?, ?)",
+        (email, "error", error)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
 # -------------------------
 # Endpoints
 # -------------------------
@@ -1174,25 +1261,48 @@ def post_usage():
     key = data.get("license_key")
     action = data.get("action", "generic")
     cost = int(data.get("cost", 1))
+    modo = data.get("modo")  # "audio_upload" | "tts"
+
 
     if not key:
         return jsonify({"error": "license_key requerido"}), 400
 
     # Ensure license exists
     lic = get_license_by_key(key)
+    
+
     if not lic:
         return jsonify({"error": "license_not_found"}), 404
+
+    plan = (lic.get("plan") or "").lower()    
 
     # If license status not active, reject
     if lic.get("status") not in ("active", "trialing"):
         return jsonify({"error": "license_inactive", "status": lic.get("status")}), 403
 
-    # Decrement credits atomically
-    new_left = adjust_credits_left(key, -cost)
-    if new_left is None:
-        return jsonify({"error": "db_error"}), 500
+    # ♾️ Generación ilimitada: PRO / AGENCY + audio subido
+    if plan in ("pro", "agency") and modo == "audio_upload":
+        print("♾️ [SERVER] Ilimitado activo → NO se descuentan créditos")
+        return jsonify({
+            "ok": True,
+            "credits_left": lic.get("credits_left"),
+            "unlimited": True,
+            "action": action
+        })
+    
 
-    return jsonify({"ok": True, "credits_left": new_left, "action": action})
+    # Decrement credits atomically
+    # ♾️ PRO / AGENCY + audio subido → NO descontar
+    if plan in ("pro", "agency") and modo == "audio_upload":
+        return jsonify({
+            "ok": True,
+            "credits_left": lic.get("credits_left"),
+            "unlimited": True,
+            "action": action
+        })
+
+    new_left = adjust_credits_left(key, -cost)
+
 
 # -------------------------
 # Webhook handling
@@ -1785,8 +1895,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
 
 
 
