@@ -187,7 +187,7 @@ def debug_metrics():
     cur.execute("""
         SELECT 
            DATE(created_at) as dia,
-           SUM(event = 'generation_start') as total,
+           SUM(event = 'start') as total,
            SUM(event = 'success') as exitos,
            SUM(event = 'error') as errores
         FROM metrics
@@ -1896,6 +1896,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
