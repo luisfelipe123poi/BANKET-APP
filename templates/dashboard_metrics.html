@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>📊 Dashboard de Métricas</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            padding: 30px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .card h2 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .card p {
+            margin: 5px 0 0;
+            opacity: 0.8;
+        }
+        canvas {
+            background: #020617;
+            padding: 20px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>📊 Dashboard de Generación</h1>
+
+<div class="cards">
+    <div class="card">
+        <h2>{{ data[0].total if data }}</h2>
+        <p>Generaciones hoy</p>
+    </div>
+    <div class="card">
+        <h2>{{ data[0].exitos if data }}</h2>
+        <p>Exitosas</p>
+    </div>
+    <div class="card">
+        <h2>{{ data[0].errores if data }}</h2>
+        <p>Errores</p>
+    </div>
+    <div class="card">
+        <h2>{{ data[0].usuarios if data }}</h2>
+        <p>Usuarios únicos</p>
+    </div>
+</div>
+
+<canvas id="chart" height="120"></canvas>
+
+<script>
+const labels = {{ data | map(attribute='dia') | list | tojson }};
+const total = {{ data | map(attribute='total') | list | tojson }};
+const exitos = {{ data | map(attribute='exitos') | list | tojson }};
+const errores = {{ data | map(attribute='errores') | list | tojson }};
+
+new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+        labels,
+        datasets: [
+            {
+                label: 'Generaciones',
+                data: total,
+                borderWidth: 2
+            },
+            {
+                label: 'Éxitos',
+                data: exitos,
+                borderWidth: 2
+            },
+            {
+                label: 'Errores',
+                data: errores,
+                borderWidth: 2
+            }
+        ]
+    },
+    options: {
+        plugins: {
+            legend: { labels: { color: 'white' } }
+        },
+        scales: {
+            x: { ticks: { color: 'white' } },
+            y: { ticks: { color: 'white' } }
+        }
+    }
+});
+</script>
+
+</body>
+</html>
