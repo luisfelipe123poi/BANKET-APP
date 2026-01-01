@@ -16,6 +16,7 @@ import jwt
 import time
 from flask import redirect
 from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template
 
 
 
@@ -98,7 +99,13 @@ PLAN_DEFAULT_CREDITS = {
     "agency": 1200
 }
 
-app = Flask(__name__)
+
+
+app = Flask(
+    __name__,
+    template_folder="templates"
+)
+
 
 
 # ------------------------------------------------------------
@@ -1918,6 +1925,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
