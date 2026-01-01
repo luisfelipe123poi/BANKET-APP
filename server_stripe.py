@@ -15,6 +15,8 @@ from urllib.parse import urljoin
 import jwt
 import time
 from flask import redirect
+from flask import Flask, request, jsonify, render_template
+
 
 
 
@@ -1916,6 +1918,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
