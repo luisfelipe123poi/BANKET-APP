@@ -99,6 +99,11 @@ PLAN_DEFAULT_CREDITS = {
     "agency": 1200
 }
 
+EVENTS_VALIDOS = {
+    "generation_start",
+    "generation_success",
+    "generation_error"
+}
 
 
 app = Flask(
@@ -1933,6 +1938,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
