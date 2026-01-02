@@ -225,7 +225,7 @@ def dashboard_metrics():
            COUNT(CASE WHEN event = 'generation_start' THEN 1 END) as total,
            COUNT(CASE WHEN event = 'generation_success' THEN 1 END) as exitos,
            COUNT(CASE WHEN event = 'generation_error' THEN 1 END) as errores
-
+           COUNT(DISTINCT email) as usuarios
         FROM metrics
         GROUP BY dia
         ORDER BY dia DESC
@@ -1966,6 +1966,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
