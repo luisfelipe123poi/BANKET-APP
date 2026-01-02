@@ -1269,41 +1269,47 @@ def post_usage():
     key = data.get("license_key")
     action = data.get("action", "generic")
     cost = int(data.get("cost", 1))
-    modo = data.get("modo")
+    modo = data.get("modo")  # "audio_upload" | "tts"
+
 
     if not key:
         return jsonify({"error": "license_key requerido"}), 400
 
+    # Ensure license exists
     lic = get_license_by_key(key)
+    
+
     if not lic:
         return jsonify({"error": "license_not_found"}), 404
 
-    plan = (lic.get("plan") or "").lower()
+    plan = (lic.get("plan") or "").lower()    
 
+    # If license status not active, reject
     if lic.get("status") not in ("active", "trialing"):
-        return jsonify({
-            "error": "license_inactive",
-            "status": lic.get("status")
-        }), 403
+        return jsonify({"error": "license_inactive", "status": lic.get("status")}), 403
 
-    # 🔽 Descontar créditos
+    # ♾️ Generación ilimitada: PRO / AGENCY + audio subido
+    if plan in ("pro", "agency") and modo == "audio_upload":
+        print("♾️ [SERVER] Ilimitado activo → NO se descuentan créditos")
+        return jsonify({
+            "ok": True,
+            "credits_left": lic.get("credits_left"),
+            "unlimited": True,
+            "action": action
+        })
+    
+
+    # Decrement credits atomically
+    # ♾️ PRO / AGENCY + audio subido → NO descontar
+    if plan in ("pro", "agency") and modo == "audio_upload":
+        return jsonify({
+            "ok": True,
+            "credits_left": lic.get("credits_left"),
+            "unlimited": True,
+            "action": action
+        })
+
     new_left = adjust_credits_left(key, -cost)
-
-    if new_left < 0:
-        return jsonify({
-            "error": "insufficient_credits",
-            "credits_left": lic.get("credits_left")
-        }), 402
-
-    # ✅ RESPUESTA FINAL (OBLIGATORIA)
-    return jsonify({
-        "ok": True,
-        "credits_left": new_left,
-        "action": action
-    }), 200
-
-
-
 # -------------------------
 # Webhook handling
 # -------------------------
@@ -1895,6 +1901,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
