@@ -1310,6 +1310,13 @@ def post_usage():
         })
 
     new_left = adjust_credits_left(key, -cost)
+
+    return jsonify({
+        "ok": True,
+        "credits_left": new_left,
+        "action": action
+    })
+
 # -------------------------
 # Webhook handling
 # -------------------------
@@ -1901,6 +1908,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
