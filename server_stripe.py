@@ -100,9 +100,9 @@ PLAN_DEFAULT_CREDITS = {
 }
 
 EVENTS_VALIDOS = {
-    "generation_session_start",   # 1 por clic
-    "generation_video_success",   # 1 por video
-    "generation_video_error"      # 1 por video
+    "generation_start",
+    "generation_success",
+    "generation_error"
 }
 
 
@@ -222,13 +222,13 @@ def dashboard_metrics():
     cur.execute("""
         SELECT 
            DATE(created_at) as dia,
-           COUNT(CASE WHEN event = 'generation_session_start' THEN 1 END) as sesiones,
-           COUNT(CASE WHEN event = 'generation_video_success' THEN 1 END) as videos_exitosos,
-           COUNT(CASE WHEN event = 'generation_video_error' THEN 1 END) as videos_fallidos,
-           COUNT(DISTINCT email) as usuarios
-       FROM metrics
-       GROUP BY dia
-       ORDER BY dia DESC;
+           COUNT(CASE WHEN event = 'generation_start' THEN 1 END) as total,
+           COUNT(CASE WHEN event = 'generation_success' THEN 1 END) as exitos,
+           COUNT(CASE WHEN event = 'generation_error' THEN 1 END) as errores
+
+        FROM metrics
+        GROUP BY dia
+        ORDER BY dia DESC
 
 
     """)
@@ -1966,6 +1966,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
