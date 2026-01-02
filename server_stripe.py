@@ -63,7 +63,7 @@ configuration.api_key["api-key"] = BREVO_API_KEY
 brevo_client = ApiClient(configuration)
 brevo_email_api = TransactionalEmailsApi(brevo_client)
 
-
+DB_PATH = "database.db"
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
 
@@ -207,6 +207,29 @@ def debug_metrics():
     conn.close()
 
     return jsonify([dict(r) for r in rows])
+
+@app.route("/dashboard/metrics")
+def dashboard_metrics():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 
+            DATE(created_at) as dia,
+            COUNT(CASE WHEN event = 'generation_start' THEN 1 END) as total,
+            COUNT(CASE WHEN event = 'generation_success' THEN 1 END) as exitos,
+            COUNT(CASE WHEN event = 'generation_error' THEN 1 END) as errores,
+            COUNT(DISTINCT email) as usuarios
+        FROM metrics
+        GROUP BY dia
+        ORDER BY dia DESC
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    return render_template("dashboard_metrics.html", data=rows)
+    
 
 def save_license(
     license_key,
@@ -1908,6 +1931,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
