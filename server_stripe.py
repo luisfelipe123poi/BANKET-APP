@@ -236,6 +236,33 @@ def dashboard_metrics():
     conn.close()
 
     return render_template("dashboard_metrics.html", data=rows)
+
+@app.route("/metrics/event", methods=["POST"])
+def metrics_event():
+    data = request.get_json() or {}
+
+    email = data.get("email")
+    event = data.get("event")
+
+    if not email or not event:
+        return jsonify({"error": "email_and_event_required"}), 400
+
+    if event not in EVENTS_VALIDOS:
+        return jsonify({"error": "invalid_event"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "INSERT INTO metrics (email, event, created_at) VALUES (?, ?, datetime('now'))",
+        (email, event)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+    
     
 
 def save_license(
@@ -1938,6 +1965,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
