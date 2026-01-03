@@ -1232,6 +1232,15 @@ def validate_license():
 
         except Exception as e:
             print("⚠️ Stripe sync error:", e)
+            
+    if lic and "expires_at" not in lic:
+    lic["expires_at"] = None
+
+    expires_at = lic.get("expires_at")
+
+    if expires_at and not isinstance(expires_at, str):
+        expires_at = str(expires_at)
+
 
     # ============================================================
     # RESPUESTA
@@ -2010,6 +2019,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
