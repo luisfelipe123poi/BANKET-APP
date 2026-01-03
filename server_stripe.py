@@ -509,26 +509,6 @@ def get_license_by_customer(customer_id):
     conn.close()
     return dict(row) if row else None
 
-def update_license_by_key(license_key, **kwargs):
-    if not kwargs:
-        return
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    sets = ", ".join([f"{k} = ?" for k in kwargs.keys()])
-    values = list(kwargs.values())
-    values.append(license_key)
-
-    cur.execute(
-        f"UPDATE licenses SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE license_key = ?",
-        values
-    )
-
-    conn.commit()
-    conn.close()
-    
-
 def set_credits_for_license(license_key, credits_total):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -727,6 +707,34 @@ def create_checkout():
     except Exception as e:
         print("❌ Error creando checkout:", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/create-customer", methods=["POST"])
+def create_customer():
+    data = request.json or {}
+    license_key = data.get("license_key")
+    email = data.get("email")
+
+    if not license_key or not email:
+        return jsonify({"error": "missing_data"}), 400
+
+    lic = get_license_by_key(license_key)
+    if not lic:
+        return jsonify({"error": "license_not_found"}), 404
+
+    if lic.get("stripe_customer_id"):
+        return jsonify({"customer_id": lic["stripe_customer_id"]})
+
+    customer = stripe.Customer.create(
+        email=email,
+        metadata={"license_key": license_key}
+    )
+
+    update_license_by_key(
+        license_key,
+        stripe_customer_id=customer.id
+    )
+
+    return jsonify({"customer_id": customer.id})
 
 
 @app.route("/auth/verify", methods=["GET"])
@@ -991,45 +999,6 @@ def get_license_by_device(device_id):
         if isinstance(meta, dict) and meta.get("device_id") == device_id:
             return lic
     return None
-
-@app.route("/billing/portal", methods=["POST"])
-def abrir_portal_facturacion():
-    data = request.json or {}
-    license_key = data.get("license_key")
-
-    if not license_key:
-        return jsonify({"error": "license_key_required"}), 400
-
-    lic = get_license_by_key(license_key)
-    if not lic:
-        return jsonify({"error": "license_not_found"}), 404
-
-    customer_id = lic.get("stripe_customer_id")
-
-    # 🔥 SI NO EXISTE CUSTOMER → CREARLO
-    if not customer_id:
-        customer = stripe.Customer.create(
-            email=lic["email"],
-            metadata={"license_key": license_key}
-        )
-        customer_id = customer.id
-
-        # Guardar en DB
-        update_license_by_key(
-            license_key,
-            stripe_customer_id=customer_id
-        )
-
-    # 🔗 Crear sesión del portal
-    session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=PUBLIC_DOMAIN
-    )
-
-    return jsonify({
-        "ok": True,
-        "url": session.url
-    })
 
 
 @app.route("/metrics/generation-start", methods=["POST"])
