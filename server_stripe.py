@@ -1156,6 +1156,9 @@ def validate_license():
     if lic.get("stripe_subscription_id"):
         try:
             sub = stripe.Subscription.retrieve(lic["stripe_subscription_id"])
+            print("DEBUG Stripe subscription status:", sub.get("status"))
+            print("DEBUG Stripe current_period_end:", sub.get("current_period_end"))
+
 
             # 🔥 FECHA REAL DE RENOVACIÓN (Stripe)
             lic["current_period_end"] = sub.get("current_period_end")
@@ -2002,6 +2005,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
