@@ -1245,7 +1245,8 @@ def validate_license():
             "status": lic.get("status", "active"),
             "credits": lic.get("credits", 0),
             "credits_left": lic.get("credits_left", 0),
-            "current_period_end": lic.get("current_period_end")
+            "expires_at": lic.get("expires_at")
+
         }
     })
 
@@ -2009,6 +2010,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
