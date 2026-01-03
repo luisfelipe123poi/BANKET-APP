@@ -1148,6 +1148,8 @@ def validate_license():
     # 🔒 aseguramos siempre el campo aunque sea FREE
     lic["current_period_end"] = None
 
+    print("DEBUG license stripe_subscription_id:", lic.get("stripe_subscription_id"))
+
     # ============================================================
     # SINCRONIZACIÓN REAL CON STRIPE
     # ============================================================
@@ -2000,6 +2002,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
