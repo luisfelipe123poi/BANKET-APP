@@ -1125,7 +1125,6 @@ def create_portal_session():
 def validate_license():
     data = request.get_json(silent=True) or {}
 
-
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
 
@@ -1146,12 +1145,18 @@ def validate_license():
     if not isinstance(lic, dict):
         lic = dict(lic)
 
+    # 🔒 aseguramos siempre el campo aunque sea FREE
+    lic["current_period_end"] = None
+
     # ============================================================
     # SINCRONIZACIÓN REAL CON STRIPE
     # ============================================================
     if lic.get("stripe_subscription_id"):
         try:
             sub = stripe.Subscription.retrieve(lic["stripe_subscription_id"])
+
+            # 🔥 FECHA REAL DE RENOVACIÓN (Stripe)
+            lic["current_period_end"] = sub.get("current_period_end")
 
             price_id = sub["items"]["data"][0]["price"]["id"]
             status = sub["status"]
@@ -1230,7 +1235,8 @@ def validate_license():
             "plan": lic.get("plan", "free"),
             "status": lic.get("status", "active"),
             "credits": lic.get("credits", 0),
-            "credits_left": lic.get("credits_left", 0)
+            "credits_left": lic.get("credits_left", 0),
+            "current_period_end": lic.get("current_period_end")
         }
     })
 
@@ -1994,6 +2000,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
