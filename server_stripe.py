@@ -969,9 +969,12 @@ def tts_neural():
     voz = data.get("voice")
     license_key = data.get("license_key")
 
-    # 🔐 validar licencia
-    ok, info = validate_license(clave_licencia)
+    if not license_key:
+        return {"ok": False, "error": "License key requerida"}, 400
 
+
+    # 🔐 validar licencia
+    ok, info = validate_license(license_key)
     if not ok:
         return {"ok": False, "error": "Licencia inválida"}, 403
 
@@ -2084,6 +2087,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
