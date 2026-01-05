@@ -969,12 +969,12 @@ def tts_neural():
     voz = data.get("voice")
 
     if not texto or not voz:
-        return {"ok": False, "error": "Texto y voz son requeridos"}, 400
+        return {"ok": False, "error": "Texto y voz requeridos"}, 400
 
-    # 🔐 validar licencia (usa el mismo sistema global del backend)
-    ok, info = validate_license()
-    if not ok:
-        return {"ok": False, "error": "Licencia inválida"}, 403
+    # 🔐 VALIDACIÓN CORRECTA (SIN DESEMPAQUETAR)
+    resp = validar_licencia()
+    if resp.status_code != 200:
+        return resp
 
     audio_path = generar_audio_neural(texto, voz)
 
@@ -2086,6 +2086,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
