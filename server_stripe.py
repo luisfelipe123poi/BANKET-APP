@@ -970,7 +970,8 @@ def tts_neural():
     license_key = data.get("license_key")
 
     # 🔐 validar licencia
-    ok, info = validar_licencia(license_key)
+    ok, info = validate_license(clave_licencia)
+
     if not ok:
         return {"ok": False, "error": "Licencia inválida"}, 403
 
@@ -2083,6 +2084,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
