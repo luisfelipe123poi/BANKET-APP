@@ -963,18 +963,16 @@ from flask import request, send_file
 
 @app.route("/tts/neural", methods=["POST"])
 def tts_neural():
-    data = request.json
+    data = request.json or {}
 
     texto = data.get("text")
     voz = data.get("voice")
-    license_key = data.get("license_key")
 
-    if not license_key:
-        return {"ok": False, "error": "License key requerida"}, 400
+    if not texto or not voz:
+        return {"ok": False, "error": "Texto y voz son requeridos"}, 400
 
-
-    # 🔐 validar licencia
-    ok, info = validate_license(license_key)
+    # 🔐 validar licencia (usa el mismo sistema global del backend)
+    ok, info = validate_license()
     if not ok:
         return {"ok": False, "error": "Licencia inválida"}, 403
 
@@ -985,6 +983,7 @@ def tts_neural():
         mimetype="audio/mpeg",
         as_attachment=True
     )
+
 
 # ========================================
 # 🔐 Endpoint para detectar conexión
@@ -2087,6 +2086,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
