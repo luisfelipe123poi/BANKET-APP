@@ -972,7 +972,7 @@ def tts_neural():
         return {"ok": False, "error": "Texto y voz requeridos"}, 400
 
     # 🔐 VALIDACIÓN CORRECTA (SIN DESEMPAQUETAR)
-    resp = validar_licencia()
+    resp = validate_license()
     if resp.status_code != 200:
         return resp
 
@@ -2086,6 +2086,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
