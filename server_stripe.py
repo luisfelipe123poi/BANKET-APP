@@ -30,6 +30,10 @@ from sib_api_v3_sdk.models import SendSmtpEmail
 import os
 import stripe
 
+print("🔍 AZURE KEY:", bool(os.getenv("AZURE_SPEECH_KEY")))
+print("🔍 AZURE REGION:", os.getenv("AZURE_SPEECH_REGION"))
+
+
 # Ruta absoluta del archivo actual (server_stripe.py)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -2079,6 +2083,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
