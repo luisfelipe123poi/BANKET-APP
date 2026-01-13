@@ -242,6 +242,13 @@ def dashboard_metrics():
 
     return render_template("dashboard_metrics.html", data=rows)
 
+@app.route("/health", methods=["GET"])
+def health():
+    return {"ok": True, "status": "online"}, 200
+
+
+    
+
 @app.route("/metrics/event", methods=["POST"])
 def metrics_event():
     data = request.get_json() or {}
@@ -2086,6 +2093,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
