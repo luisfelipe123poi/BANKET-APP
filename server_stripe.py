@@ -341,7 +341,7 @@ def save_license(
             metadata,
             referrer_code
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
     """, (
         license_key,
@@ -2161,6 +2161,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
