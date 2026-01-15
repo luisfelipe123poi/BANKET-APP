@@ -399,7 +399,7 @@ def init_db():
 
 # Inicializar DB al arrancar
 init_db()
-ensure_db_schema()
+
 ensure_referrer_code_column()
 
 
@@ -2126,6 +2126,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
