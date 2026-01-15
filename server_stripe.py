@@ -331,7 +331,7 @@ def save_license(
         stripe_customer_id,
         stripe_subscription_id,
         expires_at,
-        json.dumps(metadata or {})
+        json.dumps(metadata or {}),
         referrer_code
     ))
 
@@ -2126,6 +2126,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
