@@ -1198,6 +1198,74 @@ def metric_generation_success():
 
     return jsonify({"ok": True})
 
+@app.route("/stats/referrers", methods=["GET"])
+def stats_referrers():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) AS total_licenses,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS paid_licenses
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+        ORDER BY paid_licenses DESC
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    data = []
+    for r in rows:
+        data.append({
+            "referrer_code": r["referrer_code"],
+            "total_licenses": r["total_licenses"],
+            "paid_licenses": r["paid_licenses"]
+        })
+
+    return jsonify({
+        "ok": True,
+        "referrers": data
+    })
+
+@app.route("/stats/referrer/<code>", methods=["GET"])
+def stats_referrer_detail(code):
+    code = code.strip().upper()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            email,
+            plan,
+            credits,
+            created_at
+        FROM licenses
+        WHERE referrer_code = ?
+        ORDER BY created_at DESC
+    """, (code,))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    licenses = []
+    for r in rows:
+        licenses.append({
+            "email": r["email"],
+            "plan": r["plan"],
+            "credits": r["credits"],
+            "created_at": r["created_at"]
+        })
+
+    return jsonify({
+        "ok": True,
+        "referrer_code": code,
+        "total": len(licenses),
+        "licenses": licenses
+    })
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
@@ -2183,6 +2251,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
