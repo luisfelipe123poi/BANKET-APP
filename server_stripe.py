@@ -132,10 +132,22 @@ def ensure_db_schema():
     # 🔥 NUEVO
     if "referrer_code" not in cols:
         print("🛠️ Agregando columna referrer_code")
-        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")    
+        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")  
+
+        # 🔥 asegurar referrer_code en email_verification_tokens
+    cur.execute("PRAGMA table_info(email_verification_tokens)")
+    cols_tokens = [c[1] for c in cur.fetchall()]
+
+    if "referrer_code" not in cols_tokens:
+        print("🛠️ Agregando columna referrer_code a email_verification_tokens")
+        cur.execute(
+            "ALTER TABLE email_verification_tokens ADD COLUMN referrer_code TEXT"
+        )
+
 
     conn.commit()
     conn.close()
+    
 app = Flask(
     __name__,
     template_folder="templates"
@@ -2171,6 +2183,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
