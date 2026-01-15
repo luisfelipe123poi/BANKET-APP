@@ -17,7 +17,7 @@ import time
 from flask import redirect
 from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
-
+import sqlite3
 
 
 
@@ -34,11 +34,14 @@ print("🔍 AZURE KEY:", bool(os.getenv("AZURE_SPEECH_KEY")))
 print("🔍 AZURE REGION:", os.getenv("AZURE_SPEECH_REGION"))
 
 
-# Ruta absoluta del archivo actual (server_stripe.py)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import os
 
-# Ruta absoluta hacia la base de datos SQLite
-DB_PATH = os.path.join(BASE_DIR, "stripe_licenses.db")
+DATA_DIR = "/var/data"
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -67,7 +70,8 @@ configuration.api_key["api-key"] = BREVO_API_KEY
 brevo_client = ApiClient(configuration)
 brevo_email_api = TransactionalEmailsApi(brevo_client)
 
-DB_PATH = "database.db"
+DB_PATH = os.path.join(DATA_DIR, "database.db")
+
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
 
@@ -397,35 +401,23 @@ init_db()
 
 # --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
 def ensure_db_schema():
-    import sqlite3
-    
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    try:
-        cur.execute("PRAGMA table_info(licenses)")
-        cols = [c[1] for c in cur.fetchall()]
-    except:
-        cols = []
+    cur.execute("PRAGMA table_info(licenses)")
+    cols = [c[1] for c in cur.fetchall()]
 
-    required_cols = [
-        "id", "license_key", "stripe_customer_id", "stripe_subscription_id",
-        "email", "plan", "status", "created_at", "updated_at",
-        "expires_at", "metadata", "credits", "credits_left"
-    ]
+    if "credits_left" not in cols:
+        print("🛠️ Agregando columna credits_left")
+        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
 
-    # Si falta alguna columna, borrar BD y regenerar
-    if not all(col in cols for col in required_cols):
-        print("⚠️ BD corrupta detectada → regenerando...")
-        conn.close()
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
-        init_db()
-    else:
-        conn.close()
+    if "expires_at" not in cols:
+        print("🛠️ Agregando columna expires_at")
+        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
 
-# Ejecutar fix al iniciar servidor
-ensure_db_schema()
+    conn.commit()
+    conn.close()
+
 
 
 # -------------------------
