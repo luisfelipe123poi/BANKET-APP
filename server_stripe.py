@@ -42,7 +42,7 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
 
-
+DB_PATH = "licenses.db"
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -2161,6 +2161,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
