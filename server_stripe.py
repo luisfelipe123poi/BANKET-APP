@@ -261,6 +261,7 @@ def dashboard_metrics():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    # ---------- MÉTRICAS GENERALES ----------
     cur.execute("""
         SELECT 
            DATE(created_at) as dia,
@@ -271,10 +272,10 @@ def dashboard_metrics():
         FROM metrics
         GROUP BY dia
         ORDER BY dia DESC
-
-
     """)
+    rows = [dict(r) for r in cur.fetchall()]
 
+    # ---------- MÉTRICAS POR REFERRER ----------
     cur.execute("""
         SELECT
             referrer_code,
@@ -285,11 +286,8 @@ def dashboard_metrics():
         GROUP BY referrer_code
         ORDER BY ventas DESC
     """)
-
     referrers = [dict(r) for r in cur.fetchall()]
 
-
-    rows = cur.fetchall()
     conn.close()
 
     return render_template(
@@ -297,6 +295,7 @@ def dashboard_metrics():
         data=rows,
         referrers=referrers
     )
+
 
 
 @app.route("/dashboard/referrers")
@@ -2291,6 +2290,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
