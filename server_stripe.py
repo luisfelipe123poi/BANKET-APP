@@ -275,10 +275,29 @@ def dashboard_metrics():
 
     """)
 
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) AS total_licencias,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS ventas
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+        ORDER BY ventas DESC
+    """)
+
+referrers = [dict(r) for r in cur.fetchall()]
+
+
     rows = cur.fetchall()
     conn.close()
 
-    return render_template("dashboard_metrics.html", data=rows)
+    return render_template(
+        "dashboard_metrics.html",
+        data=rows,
+        referrers=referrers
+    )
+
 
 @app.route("/dashboard/referrers")
 def dashboard_referrers():
@@ -2272,6 +2291,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
