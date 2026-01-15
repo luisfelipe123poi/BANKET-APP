@@ -280,6 +280,27 @@ def dashboard_metrics():
 
     return render_template("dashboard_metrics.html", data=rows)
 
+@app.route("/dashboard/referrers")
+def dashboard_referrers():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) as total_licencias,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) as ventas
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+    """)
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    return jsonify(rows)
+    
+
 @app.route("/health", methods=["GET"])
 def health():
     return {"ok": True, "status": "online"}, 200
@@ -2251,6 +2272,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
