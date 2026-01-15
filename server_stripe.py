@@ -822,7 +822,7 @@ def verify():
     # Buscar token
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT email, used FROM email_verification_tokens WHERE token = ?", (token,))
+    cur.execute("SELECT email, used, referrer_code FROM email_verification_tokens WHERE token = ?", (token,))
     row = cur.fetchone()
     conn.close()
 
@@ -2161,6 +2161,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
