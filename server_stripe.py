@@ -317,6 +317,7 @@ def save_license(
             stripe_subscription_id,
             expires_at,
             metadata
+            referrer_code
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
@@ -331,6 +332,7 @@ def save_license(
         stripe_subscription_id,
         expires_at,
         json.dumps(metadata or {})
+        referrer_code
     ))
 
 
@@ -397,6 +399,8 @@ def init_db():
 
 # Inicializar DB al arrancar
 init_db()
+ensure_db_schema()
+ensure_referrer_code_column()
 
 
 # --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
@@ -418,6 +422,18 @@ def ensure_db_schema():
     conn.commit()
     conn.close()
 
+def ensure_referrer_code_column():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")
+        conn.commit()
+        print("✅ Columna referrer_code creada")
+    except Exception:
+        pass  # ya existe, no hacer nada
+
+    conn.close()
 
 
 # -------------------------
@@ -627,6 +643,29 @@ def create_free_license_internal(email):
         "plan": "free",
         "credits": credits
     }
+@app.route("/partner/validate", methods=["POST"])
+def validate_partner_code():
+    data = request.json or {}
+    code = data.get("referrer_code")
+
+    if not code:
+        return {"valid": True}  # vacío es válido
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 1 FROM partners WHERE code = ?
+    """, (code,))
+
+    exists = cur.fetchone()
+    conn.close()
+
+    if exists:
+        return {"valid": True}
+    else:
+        return {"valid": False, "error": "invalid_code"}
+
 
 @app.route("/auth/request_code", methods=["POST"])
 def request_code():
@@ -1722,6 +1761,7 @@ def local_license_create():
     plan = data.get("plan", "starter")
     credits = int(data.get("credits", 50))
     email = data.get("email", "local@test.com")
+    referrer_code = data.get("referrer_code")
 
     if not license_key:
         return jsonify({"error": "license_key requerido"}), 400
@@ -1742,6 +1782,7 @@ def local_license_create():
         expires_at=expires_at,
         metadata=metadata,
         credits=credits
+        referrer_code=referrer_code
     )
 
     # Return the full license object (app expects license payload)
