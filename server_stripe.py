@@ -393,6 +393,17 @@ def init_db():
         );
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS referrers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            owner_email TEXT,
+            active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
 
     conn.commit()
     conn.close()
@@ -639,6 +650,31 @@ def create_free_license_internal(email):
         "plan": "free",
         "credits": credits
     }
+
+
+@app.route("/referrer/validate", methods=["POST"])
+def validate_referrer():
+    data = request.get_json() or {}
+    code = (data.get("code") or "").strip().upper()
+
+    if not code:
+        return jsonify({"ok": False, "error": "code_required"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT code FROM referrers WHERE code = ? AND active = 1",
+        (code,)
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"ok": False, "valid": False}), 200
+
+    return jsonify({"ok": True, "valid": True}), 200
+
 
 @app.route("/auth/request_code", methods=["POST"])
 def request_code():
