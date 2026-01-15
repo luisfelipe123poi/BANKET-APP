@@ -41,6 +41,7 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
+VALID_REFERRER_CODE = "PARTNER01"
 
 DB_PATH = "licenses.db"
 
@@ -565,8 +566,13 @@ def request_verification():
     referrer_code = (data.get("referrer_code") or "").strip().upper()
 
     # aceptar SOLO el código fijo
-    if referrer_code != "PARTNER01":
-        referrer_code = None
+    if referrer_code and referrer_code != "PARTNER01":
+        return jsonify({
+            "ok": False,
+            "error": "invalid_referrer_code",
+            "message": "El código PARTNER no es válido."
+        }), 400
+
 
     if not email:
         return jsonify({"ok": False, "error": "missing_email"})
@@ -594,18 +600,21 @@ def request_verification():
 
     # insertamos token nuevo
     cur.execute("""
-        INSERT INTO email_verification_tokens (email, token, used, created_at)
-        VALUES (?, ?, 0, CURRENT_TIMESTAMP)
-    """, (email, token))
+        INSERT INTO email_verification_tokens (
+            email,
+            token,
+            used,
+            created_at,
+            referrer_code
+        )
+        VALUES (?, ?, 0, CURRENT_TIMESTAMP, ?)
+
+    """, (email, token, referrer_code))
 
     conn.commit()
     conn.close()
 
-    # 🔥 guardamos referrer en memoria temporal
-    tokens_db[token] = {
-        "email": email,
-        "referrer_code": referrer_code
-    }
+    
 
     enviar_correo_verificacion(email, token)
 
@@ -2162,6 +2171,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
