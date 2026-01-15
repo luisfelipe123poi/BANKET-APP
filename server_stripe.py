@@ -831,6 +831,7 @@ def verify():
 
     email = row["email"].strip().lower()
     used = row["used"]
+    referrer_code = row["referrer_code"]
 
     # Si ya fue usado antes → correo ya verificado
     if used:
@@ -2161,6 +2162,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
