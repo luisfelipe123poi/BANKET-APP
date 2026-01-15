@@ -1781,7 +1781,7 @@ def local_license_create():
         status="active",
         expires_at=expires_at,
         metadata=metadata,
-        credits=credits
+        credits=credits,
         referrer_code=referrer_code
     )
 
@@ -2126,6 +2126,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
