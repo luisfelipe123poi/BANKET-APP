@@ -13,7 +13,7 @@
             color: white;
             padding: 30px;
         }
-        h1 {
+        h1, h2 {
             margin-bottom: 20px;
         }
         .cards {
@@ -40,6 +40,22 @@
             background: #020617;
             padding: 20px;
             border-radius: 12px;
+            margin-bottom: 50px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            opacity: 0.8;
+            border-bottom: 1px solid #334155;
+        }
+        tr:not(:last-child) td {
+            border-bottom: 1px solid #1e293b;
         }
     </style>
 </head>
@@ -67,6 +83,29 @@
 </div>
 
 <canvas id="chart" height="120"></canvas>
+
+<h2>🤝 Partners / Referrers</h2>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Licencias creadas</th>
+                <th>Ventas</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in referrers %}
+            <tr>
+                <td>{{ r.referrer_code }}</td>
+                <td>{{ r.total_licencias }}</td>
+                <td>{{ r.ventas }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <script>
 const labels = {{ data | map(attribute='dia') | list | tojson }};
