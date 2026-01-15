@@ -286,7 +286,7 @@ def dashboard_metrics():
         ORDER BY ventas DESC
     """)
 
-referrers = [dict(r) for r in cur.fetchall()]
+    referrers = [dict(r) for r in cur.fetchall()]
 
 
     rows = cur.fetchall()
@@ -2291,6 +2291,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
