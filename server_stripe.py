@@ -291,7 +291,8 @@ def save_license(
     stripe_subscription_id=None,
     status="active",
     expires_at=None,
-    metadata=None
+    metadata=None,
+    referrer_code=None
 ):
     """
     Guarda una licencia nueva en la base de datos.
@@ -316,7 +317,7 @@ def save_license(
             stripe_customer_id,
             stripe_subscription_id,
             expires_at,
-            metadata
+            metadata,
             referrer_code
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -400,8 +401,6 @@ def init_db():
 # Inicializar DB al arrancar
 init_db()
 
-ensure_referrer_code_column()
-
 
 # --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
 def ensure_db_schema():
@@ -419,21 +418,14 @@ def ensure_db_schema():
         print("🛠️ Agregando columna expires_at")
         cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
 
+    # 🔥 NUEVO
+    if "referrer_code" not in cols:
+        print("🛠️ Agregando columna referrer_code")
+        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")    
+
     conn.commit()
     conn.close()
 
-def ensure_referrer_code_column():
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    try:
-        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")
-        conn.commit()
-        print("✅ Columna referrer_code creada")
-    except Exception:
-        pass  # ya existe, no hacer nada
-
-    conn.close()
 
 
 # -------------------------
@@ -558,6 +550,9 @@ def request_verification():
     data = request.json
     email = (data.get("email") or "").strip().lower()
 
+    # 🔥 NUEVO: leer referrer_code (opcional)
+    referrer_code = (data.get("referrer_code") or "").strip().upper()
+
     if not email:
         return jsonify({"ok": False, "error": "missing_email"})
 
@@ -584,8 +579,9 @@ def request_verification():
         ON CONFLICT(token) DO UPDATE SET  
             token = excluded.token,
             used = 0,
-            created_at = CURRENT_TIMESTAMP;
-    """, (email, token))
+            created_at = CURRENT_TIMESTAMP,
+            referrer_code = excluded.referrer_code;
+    """, (email, token, referrer_code))
 
     conn.commit()
     conn.close()
@@ -643,29 +639,6 @@ def create_free_license_internal(email):
         "plan": "free",
         "credits": credits
     }
-@app.route("/partner/validate", methods=["POST"])
-def validate_partner_code():
-    data = request.json or {}
-    code = data.get("referrer_code")
-
-    if not code:
-        return {"valid": True}  # vacío es válido
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT 1 FROM partners WHERE code = ?
-    """, (code,))
-
-    exists = cur.fetchone()
-    conn.close()
-
-    if exists:
-        return {"valid": True}
-    else:
-        return {"valid": False, "error": "invalid_code"}
-
 
 @app.route("/auth/request_code", methods=["POST"])
 def request_code():
@@ -737,14 +710,29 @@ def create_checkout():
         return jsonify({"ok": False, "error": "email y priceId son requeridos"}), 400
 
     try:
+        license = get_license_by_email(email)
+
+        if not license:
+            return jsonify({
+                "ok": False,
+                "error": "license_not_found"
+            }), 404
+
+        referrer_code = license.get("referrer_code")
+
         session = stripe.checkout.Session.create(
             customer_email=email,
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
+            metadata={
+                "referrer_code": referrer_code or ""
+            },
             success_url="https://stripe-backend-r14f.onrender.com/success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url="https://stripe-backend-r14f.onrender.com/cancel",
         )
+
         return redirect(session.url, code=302)
+
 
     except Exception as e:
         print("❌ Error creando checkout:", e)
@@ -846,7 +834,8 @@ def verify():
         credits=10,
         credits_left=10,
         status="active",
-        expires_at=expires_at   # ← AGREGADO
+        expires_at=expires_at,   # ← AGREGADO
+        referrer_code=referrer_code
     )
 
     lic = get_license_by_email(email)
@@ -1761,7 +1750,6 @@ def local_license_create():
     plan = data.get("plan", "starter")
     credits = int(data.get("credits", 50))
     email = data.get("email", "local@test.com")
-    referrer_code = data.get("referrer_code")
 
     if not license_key:
         return jsonify({"error": "license_key requerido"}), 400
@@ -1781,8 +1769,7 @@ def local_license_create():
         status="active",
         expires_at=expires_at,
         metadata=metadata,
-        credits=credits,
-        referrer_code=referrer_code
+        credits=credits
     )
 
     # Return the full license object (app expects license payload)
@@ -2126,9 +2113,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
-
 
 
 
