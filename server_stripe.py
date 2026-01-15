@@ -1629,6 +1629,7 @@ def redeem_license():
             stripe_customer_id=customer_id,
             stripe_subscription_id=subscription_id,
             status="active",
+            referrer_code=referrer_code,
         )
 
 
@@ -1946,7 +1947,8 @@ def local_license_create():
         status="active",
         expires_at=expires_at,
         metadata=metadata,
-        credits=credits
+        credits=credits,
+        referrer_code=referrer_code
     )
 
     # Return the full license object (app expects license payload)
@@ -2290,6 +2292,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
