@@ -558,16 +558,20 @@ def adjust_credits_left(license_key, delta):
 
 @app.route("/auth/request_verification", methods=["POST"])
 def request_verification():
-    data = request.json
+    data = request.json or {}
     email = (data.get("email") or "").strip().lower()
 
-    # 🔥 NUEVO: leer referrer_code (opcional)
+    # 🔥 referrer opcional
     referrer_code = (data.get("referrer_code") or "").strip().upper()
+
+    # aceptar SOLO el código fijo
+    if referrer_code != "PARTNER01":
+        referrer_code = None
 
     if not email:
         return jsonify({"ok": False, "error": "missing_email"})
 
-    # 🔥 SI YA EXISTE LICENCIA → NO reenviar correo, NO insertar token
+    # 🔒 si ya existe licencia → no reenviar correo
     existing = get_license_by_email(email)
     if existing:
         return jsonify({
@@ -577,25 +581,31 @@ def request_verification():
             "license": existing
         })
 
-    # Enviar token SOLO si NO existe licencia
     token = generar_token()
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # 🔥 SOLUCIÓN: insertar o actualizar token si el email ya existe
+    # ⚠️ limpiamos tokens previos de ese email
+    cur.execute(
+        "DELETE FROM email_verification_tokens WHERE email = ?",
+        (email,)
+    )
+
+    # insertamos token nuevo
     cur.execute("""
         INSERT INTO email_verification_tokens (email, token, used, created_at)
         VALUES (?, ?, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT(token) DO UPDATE SET  
-            token = excluded.token,
-            used = 0,
-            created_at = CURRENT_TIMESTAMP,
-            referrer_code = excluded.referrer_code;
-    """, (email, token, referrer_code))
+    """, (email, token))
 
     conn.commit()
     conn.close()
+
+    # 🔥 guardamos referrer en memoria temporal
+    tokens_db[token] = {
+        "email": email,
+        "referrer_code": referrer_code
+    }
 
     enviar_correo_verificacion(email, token)
 
@@ -604,7 +614,8 @@ def request_verification():
         "message": "Correo de verificación enviado."
     })
 
-def create_free_license_internal(email):
+
+def create_free_license_internal(email, referrer_code=None):
     """
     Crea una licencia FREE cuando un usuario verifica su correo.
     Si ya existe una licencia (free o de pago), NO crea otra.
@@ -638,10 +649,11 @@ def create_free_license_internal(email):
         status="active",
         expires_at=None,
         metadata={"source": "email_verification"},
-        credits=credits
+        credits=credits,
+        referrer_code=referrer_code
     )
 
-    print(f"🎁 Licencia FREE creada para {email}: {license_key}")
+    print(f"🎁 Licencia FREE creada para {email}: {license_key} | referrer={referrer_code}")
 
     return {
         "ok": True,
