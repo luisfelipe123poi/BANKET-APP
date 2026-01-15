@@ -113,7 +113,28 @@ EVENTS_VALIDOS = {
     "generation_error"
 }
 
+def ensure_db_schema():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
 
+    cur.execute("PRAGMA table_info(licenses)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    if "credits_left" not in cols:
+        print("🛠️ Agregando columna credits_left")
+        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
+
+    if "expires_at" not in cols:
+        print("🛠️ Agregando columna expires_at")
+        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
+
+    # 🔥 NUEVO
+    if "referrer_code" not in cols:
+        print("🛠️ Agregando columna referrer_code")
+        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")    
+
+    conn.commit()
+    conn.close()
 app = Flask(
     __name__,
     template_folder="templates"
@@ -413,29 +434,8 @@ def init_db():
 init_db()
 
 
-# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
-def ensure_db_schema():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
 
-    cur.execute("PRAGMA table_info(licenses)")
-    cols = [c[1] for c in cur.fetchall()]
 
-    if "credits_left" not in cols:
-        print("🛠️ Agregando columna credits_left")
-        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
-
-    if "expires_at" not in cols:
-        print("🛠️ Agregando columna expires_at")
-        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
-
-    # 🔥 NUEVO
-    if "referrer_code" not in cols:
-        print("🛠️ Agregando columna referrer_code")
-        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")    
-
-    conn.commit()
-    conn.close()
 
 
 
@@ -2161,6 +2161,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
