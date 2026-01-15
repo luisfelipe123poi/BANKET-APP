@@ -118,7 +118,7 @@ app = Flask(
     __name__,
     template_folder="templates"
 )
-
+ensure_db_schema()
 
 
 # ------------------------------------------------------------
@@ -2161,6 +2161,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
