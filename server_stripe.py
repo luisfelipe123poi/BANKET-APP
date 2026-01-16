@@ -1817,12 +1817,14 @@ def webhook():
                 new_credits_left = existing_credits_left + plan_credits
 
                 cur.execute("""
-                    plan=?,
+                    UPDATE licenses SET 
+                        plan=?,
                         credits=?,
                         credits_left=?,
                         status='active',
                         stripe_customer_id=?,
                         stripe_subscription_id=?
+
                         
                     WHERE email=?
                 """, (
@@ -1832,6 +1834,7 @@ def webhook():
                     customer_id,
                     subscription_id,
                     email
+
 
                 ))
 
@@ -1848,22 +1851,7 @@ def webhook():
                     
                 )
 
-            cur.execute("""
-                INSERT INTO payments (
-                    email,
-                    referrer_code,
-                    plan,
-                    amount_paid,
-                    currency,
-                    
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                email,
-                referrer_code,
-                plan,
-                amount_paid,
-                currency,
+            
                 
             ))
 
