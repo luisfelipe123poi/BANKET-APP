@@ -134,6 +134,21 @@ def ensure_db_schema():
         print("🛠️ Agregando columna referrer_code")
         cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")  
 
+        # 🔥 NUEVO: monto pagado (para comisiones)
+    if "amount_paid" not in cols:
+        print("🛠️ Agregando columna amount_paid")
+        cur.execute(
+            "ALTER TABLE licenses ADD COLUMN amount_paid REAL DEFAULT 0"
+        )
+    
+    if "plan" not in cols:
+        print("🛠️ Agregando columna plan")
+        cur.execute(
+            "ALTER TABLE licenses ADD COLUMN plan TEXT"
+        )
+ 
+
+
         # 🔥 asegurar referrer_code en email_verification_tokens
     cur.execute("PRAGMA table_info(email_verification_tokens)")
     cols_tokens = [c[1] for c in cur.fetchall()]
@@ -143,6 +158,8 @@ def ensure_db_schema():
         cur.execute(
             "ALTER TABLE email_verification_tokens ADD COLUMN referrer_code TEXT"
         )
+
+        
 
 
     conn.commit()
@@ -261,7 +278,7 @@ def dashboard_metrics():
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # 📊 METRICS
+    # 📊 METRICS GENERALES
     cur.execute("""
         SELECT 
            DATE(created_at) as dia,
@@ -273,20 +290,42 @@ def dashboard_metrics():
         GROUP BY dia
         ORDER BY dia DESC
     """)
-    rows = cur.fetchall()   # ✅ AQUÍ
+    rows = cur.fetchall()   # ✅ NO SE TOCA
 
-    # 🤝 REFERRERS
+    # 🤝 REFERRERS + PLANES + COMISIONES
     cur.execute("""
         SELECT
             referrer_code,
+
             COUNT(*) AS total_licencias,
-            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS ventas
+
+            -- Conteo por plan
+            SUM(CASE WHEN plan = 'free' THEN 1 ELSE 0 END) AS free,
+            SUM(CASE WHEN plan = 'starter' THEN 1 ELSE 0 END) AS starter,
+            SUM(CASE WHEN plan = 'pro' THEN 1 ELSE 0 END) AS pro,
+            SUM(CASE WHEN plan = 'agency' THEN 1 ELSE 0 END) AS agency,
+
+            -- Ventas (planes pagos)
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS ventas,
+
+            -- 💰 Comisión total calculada
+            ROUND(
+                SUM(
+                    CASE
+                        WHEN plan = 'starter' THEN amount_paid * 0.30
+                        WHEN plan = 'pro' THEN amount_paid * 0.25
+                        WHEN plan = 'agency' THEN amount_paid * 0.20
+                        ELSE 0
+                    END
+                ), 2
+            ) AS total_comision
+
         FROM licenses
         WHERE referrer_code IS NOT NULL
         GROUP BY referrer_code
-        ORDER BY ventas DESC
+        ORDER BY total_comision DESC
     """)
-    referrers = [dict(r) for r in cur.fetchall()]  # ✅ AQUÍ
+    referrers = [dict(r) for r in cur.fetchall()]  # ✅ NO SE PISA EL CURSOR
 
     conn.close()
 
@@ -295,6 +334,7 @@ def dashboard_metrics():
         data=rows,
         referrers=referrers
     )
+
 
 
 
@@ -1893,22 +1933,33 @@ def buy_credits_cancel():
         plan = plan_map.get(price_id, "starter")
         credits = credits_map[plan]
 
+        # 🔥 NUEVO: MONTO REAL PAGADO (Stripe lo envía en centavos)
+        amount_paid = (data.get("amount_paid") or 0) / 100
+
         conn = get_db_connection()
         cur = conn.cursor()
 
         cur.execute("""
             UPDATE licenses SET
-                plan=?,
-                credits=?, 
-                credits_left=?,
-                status='active'
-            WHERE email=?
-        """, (plan, credits, credits, email))
+                plan = ?,
+                credits = ?, 
+                credits_left = ?,
+                amount_paid = ?,
+                status = 'active'
+            WHERE email = ?
+        """, (
+            plan,
+            credits,
+            credits,
+            amount_paid,
+            email
+        ))
 
         conn.commit()
         conn.close()
 
     return jsonify({"received": True})
+
 
 # Debug: list licenses
 @app.route("/_debug/licenses", methods=["GET"])
