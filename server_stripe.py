@@ -1475,12 +1475,11 @@ def validate_license():
             print("DEBUG Stripe subscription status:", sub.get("status"))
             print("DEBUG Stripe current_period_end:", sub.get("current_period_end"))
 
-
             # 🔥 FECHA REAL DE RENOVACIÓN (Stripe)
             lic["current_period_end"] = sub.get("current_period_end")
 
             price_id = sub["items"]["data"][0]["price"]["id"]
-            status = sub["status"]
+            stripe_status = sub.get("status")
 
             # Mapear plan
             plan_map = {
@@ -1492,7 +1491,7 @@ def validate_license():
                 PRICE_ID_AGENCY_ANNUAL: "agency"
             }
 
-            new_plan = plan_map.get(price_id, lic["plan"])
+            new_plan = plan_map.get(price_id, lic.get("plan", "free"))
 
             credits_map = {
                 "starter": 100,
@@ -1501,13 +1500,20 @@ def validate_license():
                 "free": 10
             }
 
-            new_credits = credits_map[new_plan]
+            # Créditos del plan
+            plan_credits = credits_map.get(new_plan, 10)
 
-            # Mantener créditos usados siempre
-            credits_left = lic.get("credits_left", new_credits)
+            # 🔥 Mantener créditos usados
+            used_credits = max(
+                (lic.get("credits", 0) or 0) - (lic.get("credits_left", 0) or 0),
+                0
+            )
+
+            new_credits = plan_credits
+            new_credits_left = max(plan_credits - used_credits, 0)
 
             # Si la suscripción está cancelada / pausada / vencida
-            if status not in ("active", "trialing"):
+            if stripe_status not in ("active", "trialing"):
                 lic["status"] = "inactive"
 
                 conn = get_db_connection()
@@ -1530,32 +1536,40 @@ def validate_license():
                     plan=?, 
                     credits=?, 
                     credits_left=?, 
-                    status=?
+                    status='active',
+                    updated_at=CURRENT_TIMESTAMP
                 WHERE license_key=?
-            """, (new_plan, new_credits, credits_left, status, lic["license_key"]))
+            """, (
+                new_plan,
+                new_credits,
+                new_credits_left,
+                lic["license_key"]
+            ))
             conn.commit()
             conn.close()
 
             # Actualizar en memoria
             lic["plan"] = new_plan
             lic["credits"] = new_credits
-            lic["credits_left"] = credits_left
-            lic["status"] = status
+            lic["credits_left"] = new_credits_left
+            lic["status"] = "active"
 
         except Exception as e:
             print("⚠️ Stripe sync error:", e)
-            
-    if lic and "expires_at" not in lic:
+            # ⚠️ NO rompemos la validación si Stripe falla
+
+    # ---------------------------------------------------
+    # Normalización de expiración
+    # ---------------------------------------------------
+    if "expires_at" not in lic:
         lic["expires_at"] = None
 
     expires_at = lic.get("expires_at")
-
     if expires_at and not isinstance(expires_at, str):
         expires_at = str(expires_at)
 
-
     # ============================================================
-    # RESPUESTA
+    # RESPUESTA FINAL
     # ============================================================
     return jsonify({
         "valid": True,
@@ -1566,10 +1580,11 @@ def validate_license():
             "status": lic.get("status", "active"),
             "credits": lic.get("credits", 0),
             "credits_left": lic.get("credits_left", 0),
-            "expires_at": lic.get("expires_at")
-
+            "expires_at": lic.get("expires_at"),
+            "current_period_end": lic.get("current_period_end")
         }
-    })
+    }), 200
+
 
 
 @app.route("/license/by-email", methods=["POST"])
