@@ -1793,9 +1793,7 @@ def webhook():
 
         # 🟩 SUSCRIPCIONES
         if session.get("mode") == "subscription":
-            email = session["customer_details"]["email"]
-            subscription_id = session.get("subscription")
-            customer_id = session.get("customer")
+            
 
             line_items = stripe.checkout.Session.list_line_items(session["id"])
             price_id = line_items.data[0].price.id
@@ -1819,13 +1817,13 @@ def webhook():
                 new_credits_left = existing_credits_left + plan_credits
 
                 cur.execute("""
-                    UPDATE licenses SET 
-                        plan=?,
+                    plan=?,
                         credits=?,
                         credits_left=?,
                         status='active',
                         stripe_customer_id=?,
                         stripe_subscription_id=?
+                        
                     WHERE email=?
                 """, (
                     plan,
@@ -1834,6 +1832,7 @@ def webhook():
                     customer_id,
                     subscription_id,
                     email
+
                 ))
 
             else:
@@ -1846,6 +1845,7 @@ def webhook():
                     status="active",
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id
+                    
                 )
 
             cur.execute("""
@@ -1855,7 +1855,7 @@ def webhook():
                     plan,
                     amount_paid,
                     currency,
-                    stripe_session_id
+                    
                 )
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
@@ -1864,7 +1864,7 @@ def webhook():
                 plan,
                 amount_paid,
                 currency,
-                stripe_session_id
+                
             ))
 
             conn.commit()
