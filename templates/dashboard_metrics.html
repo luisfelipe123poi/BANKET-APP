@@ -13,7 +13,7 @@
             color: white;
             padding: 30px;
         }
-        h1, h2 {
+        h1 {
             margin-bottom: 20px;
         }
         .cards {
@@ -40,22 +40,6 @@
             background: #020617;
             padding: 20px;
             border-radius: 12px;
-            margin-bottom: 50px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            opacity: 0.8;
-            border-bottom: 1px solid #334155;
-        }
-        tr:not(:last-child) td {
-            border-bottom: 1px solid #1e293b;
         }
     </style>
 </head>
@@ -63,113 +47,62 @@
 
 <h1>📊 Dashboard de Generación</h1>
 
-<!-- 🔢 MÉTRICAS SUPERIORES -->
 <div class="cards">
     <div class="card">
-        <h2>{{ data[0].total if data else 0 }}</h2>
+        <h2>{{ data[0].total if data }}</h2>
         <p>Generaciones hoy</p>
     </div>
     <div class="card">
-        <h2>{{ data[0].exitos if data else 0 }}</h2>
+        <h2>{{ data[0].exitos if data }}</h2>
         <p>Exitosas</p>
     </div>
     <div class="card">
-        <h2>{{ data[0].errores if data else 0 }}</h2>
+        <h2>{{ data[0].errores if data }}</h2>
         <p>Errores</p>
     </div>
     <div class="card">
-        <h2>{{ data[0].usuarios if data else 0 }}</h2>
+        <h2>{{ data[0].usuarios if data }}</h2>
         <p>Usuarios únicos</p>
     </div>
 </div>
 
-<!-- 📈 GRÁFICA GENERACIONES -->
-<canvas id="chartGeneraciones" height="120"></canvas>
-
-<h2>🤝 Partners / Referrers</h2>
-
-<!-- 📊 GRÁFICA COMISIONES -->
-<canvas id="chartPartners" height="120"></canvas>
-
-<!-- 📋 TABLA PARTNERS -->
-<div class="card">
-    <table>
-        <thead>
-            <tr>
-                <th>Código</th>
-                <th>Free</th>
-                <th>Starter</th>
-                <th>Pro</th>
-                <th>Agency</th>
-                <th>Total licencias</th>
-                <th>💰 Comisión</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in referrers %}
-            <tr>
-                <td>{{ r.referrer_code }}</td>
-                <td>{{ r.free }}</td>
-                <td>{{ r.starter }}</td>
-                <td>{{ r.pro }}</td>
-                <td>{{ r.agency }}</td>
-                <td>{{ r.total_licencias }}</td>
-                <td>${{ r.total_comision }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<canvas id="chart" height="120"></canvas>
 
 <script>
-/* -----------------------------
-   📈 GENERACIONES
------------------------------ */
 const labels = {{ data | map(attribute='dia') | list | tojson }};
 const total = {{ data | map(attribute='total') | list | tojson }};
 const exitos = {{ data | map(attribute='exitos') | list | tojson }};
 const errores = {{ data | map(attribute='errores') | list | tojson }};
 
-new Chart(document.getElementById('chartGeneraciones'), {
+new Chart(document.getElementById('chart'), {
     type: 'line',
     data: {
         labels,
         datasets: [
-            { label: 'Generaciones', data: total, borderWidth: 2 },
-            { label: 'Éxitos', data: exitos, borderWidth: 2 },
-            { label: 'Errores', data: errores, borderWidth: 2 }
+            {
+                label: 'Generaciones',
+                data: total,
+                borderWidth: 2
+            },
+            {
+                label: 'Éxitos',
+                data: exitos,
+                borderWidth: 2
+            },
+            {
+                label: 'Errores',
+                data: errores,
+                borderWidth: 2
+            }
         ]
     },
     options: {
-        plugins: { legend: { labels: { color: 'white' } } },
+        plugins: {
+            legend: { labels: { color: 'white' } }
+        },
         scales: {
             x: { ticks: { color: 'white' } },
             y: { ticks: { color: 'white' } }
-        }
-    }
-});
-
-/* -----------------------------
-   🤝 PARTNERS / COMISIONES
------------------------------ */
-const partnerLabels = {{ referrers | map(attribute='referrer_code') | list | tojson }};
-const partnerComisiones = {{ referrers | map(attribute='total_comision') | list | tojson }};
-
-new Chart(document.getElementById('chartPartners'), {
-    type: 'bar',
-    data: {
-        labels: partnerLabels,
-        datasets: [{
-            label: 'Comisión total por Partner ($)',
-            data: partnerComisiones,
-            borderWidth: 1
-        }]
-    },
-    options: {
-        plugins: { legend: { labels: { color: 'white' } } },
-        scales: {
-            x: { ticks: { color: 'white' } },
-            y: { ticks: { color: 'white' }, beginAtZero: true }
         }
     }
 });
