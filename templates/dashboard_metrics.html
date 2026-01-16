@@ -63,6 +63,7 @@
 
 <h1>📊 Dashboard de Generación</h1>
 
+<!-- 🔢 MÉTRICAS SUPERIORES -->
 <div class="cards">
     <div class="card">
         <h2>{{ data[0].total if data else 0 }}</h2>
@@ -87,24 +88,33 @@
 
 <h2>🤝 Partners / Referrers</h2>
 
-<!-- 📊 GRÁFICA PARTNERS -->
+<!-- 📊 GRÁFICA COMISIONES -->
 <canvas id="chartPartners" height="120"></canvas>
 
+<!-- 📋 TABLA PARTNERS -->
 <div class="card">
     <table>
         <thead>
             <tr>
                 <th>Código</th>
-                <th>Licencias</th>
-                <th>Ventas</th>
+                <th>Free</th>
+                <th>Starter</th>
+                <th>Pro</th>
+                <th>Agency</th>
+                <th>Total licencias</th>
+                <th>💰 Comisión</th>
             </tr>
         </thead>
         <tbody>
             {% for r in referrers %}
             <tr>
                 <td>{{ r.referrer_code }}</td>
+                <td>{{ r.free }}</td>
+                <td>{{ r.starter }}</td>
+                <td>{{ r.pro }}</td>
+                <td>{{ r.agency }}</td>
                 <td>{{ r.total_licencias }}</td>
-                <td>{{ r.ventas }}</td>
+                <td>${{ r.total_comision }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -140,18 +150,18 @@ new Chart(document.getElementById('chartGeneraciones'), {
 });
 
 /* -----------------------------
-   🤝 PARTNERS / REFERRERS
+   🤝 PARTNERS / COMISIONES
 ----------------------------- */
 const partnerLabels = {{ referrers | map(attribute='referrer_code') | list | tojson }};
-const partnerVentas = {{ referrers | map(attribute='ventas') | list | tojson }};
+const partnerComisiones = {{ referrers | map(attribute='total_comision') | list | tojson }};
 
 new Chart(document.getElementById('chartPartners'), {
     type: 'bar',
     data: {
         labels: partnerLabels,
         datasets: [{
-            label: 'Ventas por Partner',
-            data: partnerVentas,
+            label: 'Comisión total por Partner ($)',
+            data: partnerComisiones,
             borderWidth: 1
         }]
     },
@@ -167,4 +177,3 @@ new Chart(document.getElementById('chartPartners'), {
 
 </body>
 </html>
-
