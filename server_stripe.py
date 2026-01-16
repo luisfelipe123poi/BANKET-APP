@@ -1784,6 +1784,12 @@ def webhook():
     # CHECKOUT COMPLETED
     # ============================================================
     if event_type == "checkout.session.completed":
+        session = event["data"]["object"]
+
+        amount_paid = session.get("amount_total", 0) / 100
+        currency = session.get("currency", "usd")
+        email = session.get("customer_details", {}).get("email")
+
 
         # 🟩 SUSCRIPCIONES
         if session.get("mode") == "subscription":
@@ -1841,6 +1847,25 @@ def webhook():
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id
                 )
+
+            cur.execute("""
+                INSERT INTO payments (
+                    email,
+                    referrer_code,
+                    plan,
+                    amount_paid,
+                    currency,
+                    stripe_session_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                email,
+                referrer_code,
+                plan,
+                amount_paid,
+                currency,
+                stripe_session_id
+            ))
 
             conn.commit()
             conn.close()
