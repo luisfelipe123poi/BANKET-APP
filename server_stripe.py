@@ -1784,8 +1784,7 @@ def webhook():
     # CHECKOUT COMPLETED
     # ============================================================
     if event_type == "checkout.session.completed":
-        session = event["data"]["object"]
-        amount_paid = (session.get("amount_total") or 0) / 100
+        
 
 
         # 🟩 SUSCRIPCIONES
@@ -2350,6 +2349,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
