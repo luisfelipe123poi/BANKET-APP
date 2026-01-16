@@ -1784,22 +1784,24 @@ def webhook():
     # CHECKOUT COMPLETED
     # ============================================================
     if event_type == "checkout.session.completed":
-        session = event["data"]["object"]
-
-        amount_paid = session.get("amount_total", 0) / 100
+        amount_paid = (session.get("amount_total") or 0) / 100
         currency = session.get("currency", "usd")
-        email = session.get("customer_details", {}).get("email")
 
+        email = session.get("customer_details", {}).get("email")
+        customer_id = session.get("customer")
+        subscription_id = session.get("subscription")
+        referrer_code = session.get("metadata", {}).get("referrer_code")
 
         # 🟩 SUSCRIPCIONES
         if session.get("mode") == "subscription":
-            
 
-            line_items = stripe.checkout.Session.list_line_items(session["id"])
-            price_id = line_items.data[0].price.id
+            line_items = stripe.checkout.Session.list_line_items(
+                session["id"], limit=1
+            )
 
+            price_id = line_items["data"][0]["price"]["id"]
             plan = plan_map.get(price_id, "starter")
-            plan_credits = credits_map[plan]
+            plan_credits = credits_map.get(plan, 100)
 
             print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
 
@@ -1809,7 +1811,6 @@ def webhook():
             cur = conn.cursor()
 
             if existing:
-                # 🔥 SUMAR créditos existentes + créditos del plan
                 existing_credits = int(existing.get("credits", 0) or 0)
                 existing_credits_left = int(existing.get("credits_left", 0) or 0)
 
@@ -1817,16 +1818,15 @@ def webhook():
                 new_credits_left = existing_credits_left + plan_credits
 
                 cur.execute("""
-                    UPDATE licenses SET 
-                        plan=?,
-                        credits=?,
-                        credits_left=?,
-                        status='active',
-                        stripe_customer_id=?,
-                        stripe_subscription_id=?
-
-                        
-                    WHERE email=?
+                    UPDATE licenses SET
+                        plan = ?,
+                        credits = ?,
+                        credits_left = ?,
+                        status = 'active',
+                        stripe_customer_id = ?,
+                        stripe_subscription_id = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE email = ?
                 """, (
                     plan,
                     new_total_credits,
@@ -1834,9 +1834,9 @@ def webhook():
                     customer_id,
                     subscription_id,
                     email
-
-
                 ))
+
+                print(f"✅ Licencia actualizada correctamente para {email}")
 
             else:
                 new_key = gen_license()
@@ -1848,16 +1848,29 @@ def webhook():
                     status="active",
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id
-                    
                 )
 
-            
-                
+                print(f"🆕 Licencia creada desde webhook para {email}")
+
+            cur.execute("""
+                INSERT INTO payments (
+                    email,
+                    referrer_code,
+                    plan,
+                    amount_paid,
+                    currency
+                )
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                email,
+                referrer_code,
+                plan,
+                amount_paid,
+                currency
             ))
 
             conn.commit()
             conn.close()
-
 
         # 🟦 PAGOS ÚNICOS (PACKS DE CRÉDITOS)
         elif session.get("mode") == "payment":
@@ -1875,27 +1888,29 @@ def webhook():
                 if lic:
                     extra = int(credits_to_add)
 
-                    new_credits = (lic["credits"] or 0) + extra
-                    new_credits_left = (lic["credits_left"] or 0) + extra
+                    new_credits = int(lic.get("credits", 0) or 0) + extra
+                    new_credits_left = int(lic.get("credits_left", 0) or 0) + extra
 
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(
-                        """
-                        UPDATE licenses 
-                        SET credits = ?, credits_left = ?, updated_at = CURRENT_TIMESTAMP
+                    cur.execute("""
+                        UPDATE licenses
+                        SET credits = ?,
+                            credits_left = ?,
+                            updated_at = CURRENT_TIMESTAMP
                         WHERE license_key = ?
-                        """,
-                        (new_credits, new_credits_left, lic["license_key"])
-                    )
+                    """, (
+                        new_credits,
+                        new_credits_left,
+                        lic["license_key"]
+                    ))
+
                     conn.commit()
                     conn.close()
 
                     print(f"🟩 Créditos sumados correctamente: +{extra} → {email}")
                 else:
                     print("❌ Pago recibido pero no existe licencia para:", email)
-
-
 
     # ============================================================
     # OTROS EVENTOS → IGNORAR PERO RESPONDER OK
@@ -1905,6 +1920,7 @@ def webhook():
 
     # 🔥 ESTO ES OBLIGATORIO
     return "OK", 200
+
 
 
 @app.route("/buy-credits-success", methods=["GET"])
