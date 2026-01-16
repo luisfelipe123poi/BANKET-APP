@@ -1784,8 +1784,6 @@ def webhook():
     # CHECKOUT COMPLETED
     # ============================================================
     if event_type == "checkout.session.completed":
-        
-
 
         # 🟩 SUSCRIPCIONES
         if session.get("mode") == "subscription":
@@ -1822,7 +1820,6 @@ def webhook():
                         status='active',
                         stripe_customer_id=?,
                         stripe_subscription_id=?
-                        amount_paid=? 
                     WHERE email=?
                 """, (
                     plan,
@@ -1830,7 +1827,6 @@ def webhook():
                     new_credits_left,
                     customer_id,
                     subscription_id,
-                    amount_paid, 
                     email
                 ))
 
@@ -1843,8 +1839,7 @@ def webhook():
                     credits=plan_credits,
                     status="active",
                     stripe_customer_id=customer_id,
-                    stripe_subscription_id=subscription_id,
-                    amount_paid=amount_paid 
+                    stripe_subscription_id=subscription_id
                 )
 
             conn.commit()
@@ -2349,7 +2344,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
 
 
 
