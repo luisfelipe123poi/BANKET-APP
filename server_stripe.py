@@ -74,6 +74,17 @@ DB_PATH = os.path.join(DATA_DIR, "database.db")
 
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
+PLANES_USD = {
+    "starter": 19,
+    "pro": 49,
+    "agency": 149
+}
+
+MP_INTERNAL_AMOUNT = {
+    "starter": 19000,
+    "pro": 49000,
+    "agency": 149000
+}
 
 
 # Carga de .env si existe
@@ -1120,22 +1131,16 @@ def crear_suscripcion_mp():
     email = data.get("email")
     plan = data.get("plan")
 
-    PLANES = {
-        "starter": 19000,
-        "pro": 49000,
-        "agency": 149000
-    }
-
-    if not email or plan not in PLANES:
+    if not email or plan not in PLANES_USD:
         return jsonify({"ok": False, "error": "datos_invalidos"}), 400
 
     preapproval = {
-        "reason": f"TurboClips Plan {plan}",
-        "payer_email": email,  # 👈 OBLIGATORIO ASÍ
+        "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
+        "payer_email": email,
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
-            "transaction_amount": PLANES[plan],
+            "transaction_amount": MP_INTERNAL_AMOUNT[plan],
             "currency_id": "COP"
         },
         "back_url": "https://stripe-backend-r14f.onrender.com/mp/success",
@@ -1145,13 +1150,14 @@ def crear_suscripcion_mp():
     result = mp.preapproval().create(preapproval)
 
     if result.get("status") != 201:
-        print("❌ Error MP:", result["response"])
+        print("❌ MP error:", result["response"])
         return jsonify({"ok": False, "error": result["response"]}), 500
 
     return jsonify({
         "ok": True,
         "pay_url": result["response"]["init_point"]
     })
+
 
 
 
@@ -2214,6 +2220,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
