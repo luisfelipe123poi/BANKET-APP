@@ -1069,12 +1069,13 @@ def get_license_by_device(device_id):
 @app.route("/payments/mp/create", methods=["POST"])
 def crear_pago_mp():
     data = request.json
-    email = data["email"]
-    plan = data["plan"]
+    email = data.get("email")
+    plan = data.get("plan")
 
     PLANES = {
-        "pro": 99000,      # COP
-        "agency": 299000
+        "starter": 19000,
+        "pro": 49000,
+        "agency": 149000
     }
 
     if plan not in PLANES:
@@ -1088,19 +1089,30 @@ def crear_pago_mp():
             "currency_id": "COP"
         }],
         "payer": {"email": email},
-        "notification_url": "https://stripe-backend-r14f.onrender.com/webhooks/mercadopago",
-        "auto_return": "approved",
-        "external_reference": f"{email}|{plan}"
+        "external_reference": f"{email}|{plan}",
+        "auto_return": "approved"
     }
 
     result = mp.preference().create(preference)
 
+    response = result.get("response", {})
+
+    # 🔥 CLAVE: aceptar ambos modos
+    pay_url = response.get("init_point") or response.get("sandbox_init_point")
+
+    if not pay_url:
+        print("❌ MercadoPago response:", response)
+        return jsonify({
+            "ok": False,
+            "error": "no_pay_url",
+            "mp_response": response
+        }), 500
+
     return jsonify({
         "ok": True,
-        "pay_url": result["response"]["init_point"]
+        "pay_url": pay_url
     })
 
-pagos_procesados = set()
 
 @app.route("/webhooks/mercadopago", methods=["POST"])
 def webhook_mp():
@@ -2157,6 +2169,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
