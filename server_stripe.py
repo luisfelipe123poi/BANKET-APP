@@ -18,7 +18,7 @@ from flask import redirect
 from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
 import sqlite3
-
+import mercadopago
 
 
 
@@ -41,7 +41,7 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-
+mp = mercadopago.SDK(os.getenv("MP_ACCESS_TOKEN"))
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -1065,6 +1065,60 @@ def get_license_by_device(device_id):
         if isinstance(meta, dict) and meta.get("device_id") == device_id:
             return lic
     return None
+
+@app.route("/payments/mp/create", methods=["POST"])
+def crear_pago_mp():
+    data = request.json
+    email = data["email"]
+    plan = data["plan"]
+
+    PLANES = {
+        "pro": 99000,      # COP
+        "agency": 299000
+    }
+
+    if plan not in PLANES:
+        return jsonify({"ok": False, "error": "plan_invalido"}), 400
+
+    preference = {
+        "items": [{
+            "title": f"TurboClips Plan {plan}",
+            "quantity": 1,
+            "unit_price": PLANES[plan],
+            "currency_id": "COP"
+        }],
+        "payer": {"email": email},
+        "notification_url": "https://TU_DOMINIO/webhooks/mercadopago",
+        "auto_return": "approved",
+        "external_reference": f"{email}|{plan}"
+    }
+
+    result = mp.preference().create(preference)
+
+    return jsonify({
+        "ok": True,
+        "pay_url": result["response"]["init_point"]
+    })
+
+@app.route("/webhooks/mercadopago", methods=["POST"])
+def webhook_mp():
+    data = request.json
+
+    if data.get("type") != "payment":
+        return "ok", 200
+
+    payment_id = data["data"]["id"]
+    payment = mp.payment().get(payment_id)["response"]
+
+    if payment["status"] != "approved":
+        return "ok", 200
+
+    ref = payment["external_reference"]
+    email, plan = ref.split("|")
+
+    activar_licencia(email, plan)
+
+    return "ok", 200
 
 
 @app.route("/metrics/generation-start", methods=["POST"])
