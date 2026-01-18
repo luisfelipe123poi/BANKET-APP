@@ -44,7 +44,7 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-mp = mercadopago.SDK(get_mp_access_token())
+
 
 
 MP_MODE = os.getenv("MP_MODE", "prod").lower()
@@ -193,7 +193,7 @@ def get_mp_access_token():
     print(f"🧪 MP MODE: {MP_MODE}")
     return token
 
-
+mp = mercadopago.SDK(get_mp_access_token())
 
 def generar_token():
     return uuid.uuid4().hex
