@@ -19,6 +19,8 @@ from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
 import sqlite3
 import mercadopago
+from datetime import date
+
 
 
 
@@ -2264,6 +2266,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
