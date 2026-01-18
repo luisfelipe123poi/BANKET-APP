@@ -45,11 +45,6 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
 mp = mercadopago.SDK(os.getenv("MP_ACCESS_TOKEN"))
-MP_MODE = os.getenv("MP_MODE", "test")
-MP_TEST_PAYER_EMAIL = os.getenv(
-    "MP_TEST_PAYER_EMAIL",
-    "test_user_123456@testuser.com"
-)
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -1183,7 +1178,7 @@ def crear_suscripcion_mp():
     # 🧾 Suscripción MercadoPago
     preapproval = {
         "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
-        "payer_email": MP_TEST_PAYER_EMAIL if MP_MODE == "test" else email,
+        "payer_email": email,
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
@@ -2271,7 +2266,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
 
 
 
