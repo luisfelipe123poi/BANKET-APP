@@ -1079,7 +1079,7 @@ def crear_pago_mp():
     }
 
     if plan not in PLANES:
-        return jsonify({"ok": False, "error": "plan_invalido"}), 400
+        return jsonify({"ok": False}), 400
 
     preference = {
         "items": [{
@@ -1090,28 +1090,30 @@ def crear_pago_mp():
         }],
         "payer": {"email": email},
         "external_reference": f"{email}|{plan}",
+
+        # 🔥 ESTO ES LO QUE FALTABA
+        "back_urls": {
+            "success": "https://stripe-backend-r14f.onrender.com/mp/success",
+            "failure": "https://stripe-backend-r14f.onrender.com/mp/failure",
+            "pending": "https://stripe-backend-r14f.onrender.com/mp/pending"
+        },
         "auto_return": "approved"
     }
 
     result = mp.preference().create(preference)
-
     response = result.get("response", {})
 
-    # 🔥 CLAVE: aceptar ambos modos
     pay_url = response.get("init_point") or response.get("sandbox_init_point")
 
     if not pay_url:
         print("❌ MercadoPago response:", response)
-        return jsonify({
-            "ok": False,
-            "error": "no_pay_url",
-            "mp_response": response
-        }), 500
+        return jsonify({"ok": False}), 500
 
     return jsonify({
         "ok": True,
         "pay_url": pay_url
     })
+
 
 
 @app.route("/webhooks/mercadopago", methods=["POST"])
@@ -2169,6 +2171,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
