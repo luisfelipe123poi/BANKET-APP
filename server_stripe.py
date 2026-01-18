@@ -1114,41 +1114,83 @@ def crear_pago_mp():
         "pay_url": pay_url
     })
 
+@app.route("/payments/mp/subscribe", methods=["POST"])
+def crear_suscripcion_mp():
+    data = request.json
+    email = data.get("email")
+    plan = data.get("plan")
+
+    PLANES = {
+        "starter": 19000,
+        "pro": 49000,
+        "agency": 149000
+    }
+
+    if plan not in PLANES:
+        return jsonify({"ok": False, "error": "plan_invalido"}), 400
+
+    preapproval = {
+        "reason": f"TurboClips Plan {plan}",
+        "payer_email": email,
+        "auto_recurring": {
+            "frequency": 1,
+            "frequency_type": "months",
+            "transaction_amount": PLANES[plan],
+            "currency_id": "COP"
+        },
+        "back_url": "https://stripe-backend-r14f.onrender.com/mp/success",
+        "external_reference": f"{email}|{plan}",
+        "status": "authorized"
+    }
+
+    result = mp.preapproval().create(preapproval)
+
+    if "init_point" not in result["response"]:
+        print("❌ MP error:", result["response"])
+        return jsonify({"ok": False, "error": result["response"]}), 500
+
+    return jsonify({
+        "ok": True,
+        "pay_url": result["response"]["init_point"]
+    })
 
 
 @app.route("/webhooks/mercadopago", methods=["POST"])
 def webhook_mp():
-    data = request.json
+    data = request.json or {}
 
-    if data.get("type") != "payment":
+    tipo = data.get("type")
+
+    # ==========================
+    # 🔁 SUSCRIPCIONES
+    # ==========================
+    if tipo == "preapproval":
+        preapproval_id = data["data"]["id"]
+        info = mp.preapproval().get(preapproval_id)["response"]
+
+        if info["status"] != "authorized":
+            return "ok", 200
+
+        email, plan = info["external_reference"].split("|")
+        activar_licencia(email, plan)
         return "ok", 200
 
-    payment_id = data["data"]["id"]
+    # ==========================
+    # 💳 PAGOS ÚNICOS
+    # ==========================
+    if tipo == "payment":
+        payment_id = data["data"]["id"]
+        info = mp.payment().get(payment_id)["response"]
 
-    # 🔒 Evitar doble procesamiento
-    if payment_id in pagos_procesados:
+        if info["status"] != "approved":
+            return "ok", 200
+
+        email, plan = info["external_reference"].split("|")
+        procesar_pago_unico(email, plan)
         return "ok", 200
-
-    payment = mp.payment().get(payment_id)["response"]
-
-    if payment.get("status") != "approved":
-        return "ok", 200
-
-    ref = payment.get("external_reference", "")
-    if "|" not in ref:
-        return "ok", 200
-
-    email, plan = ref.split("|", 1)
-
-    if plan not in ["starter", "pro", "agency"]:
-
-        return "ok", 200
-
-    activar_licencia(email, plan)
-
-    pagos_procesados.add(payment_id)
 
     return "ok", 200
+
 
 
 
@@ -2171,6 +2213,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
