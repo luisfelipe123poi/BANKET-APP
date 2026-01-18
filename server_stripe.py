@@ -1126,14 +1126,12 @@ def crear_suscripcion_mp():
         "agency": 149000
     }
 
-    if plan not in PLANES:
-        return jsonify({"ok": False, "error": "plan_invalido"}), 400
+    if not email or plan not in PLANES:
+        return jsonify({"ok": False, "error": "datos_invalidos"}), 400
 
     preapproval = {
         "reason": f"TurboClips Plan {plan}",
-        "payer": {
-            "email": email
-        },
+        "payer_email": email,  # 👈 OBLIGATORIO ASÍ
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
@@ -1154,6 +1152,7 @@ def crear_suscripcion_mp():
         "ok": True,
         "pay_url": result["response"]["init_point"]
     })
+
 
 
 
@@ -2215,6 +2214,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
