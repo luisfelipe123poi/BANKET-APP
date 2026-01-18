@@ -1131,7 +1131,9 @@ def crear_suscripcion_mp():
 
     preapproval = {
         "reason": f"TurboClips Plan {plan}",
-        "payer_email": email,
+        "payer": {
+            "email": email
+        },
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
@@ -1139,20 +1141,20 @@ def crear_suscripcion_mp():
             "currency_id": "COP"
         },
         "back_url": "https://stripe-backend-r14f.onrender.com/mp/success",
-        "external_reference": f"{email}|{plan}",
-        "status": "authorized"
+        "external_reference": f"{email}|{plan}"
     }
 
     result = mp.preapproval().create(preapproval)
 
-    if "init_point" not in result["response"]:
-        print("❌ MP error:", result["response"])
+    if result.get("status") != 201:
+        print("❌ Error MP:", result["response"])
         return jsonify({"ok": False, "error": result["response"]}), 500
 
     return jsonify({
         "ok": True,
         "pay_url": result["response"]["init_point"]
     })
+
 
 
 @app.route("/webhooks/mercadopago", methods=["POST"])
@@ -2213,6 +2215,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
