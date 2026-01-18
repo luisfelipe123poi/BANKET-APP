@@ -35,6 +35,7 @@ print("🔍 AZURE REGION:", os.getenv("AZURE_SPEECH_REGION"))
 
 
 import os
+USD_RATE_FILE = "usd_rate.json"
 
 DATA_DIR = "/var/data"
 
@@ -143,6 +144,39 @@ def home():
 # SISTEMA DE TOKENS PARA EMAIL
 # ======================================
 tokens_db = {}
+
+def obtener_tasa_usd_cop():
+    hoy = date.today().isoformat()
+
+    # 🍎 1. Si ya existe tasa de HOY → usarla
+    if os.path.exists(USD_RATE_FILE):
+        try:
+            data = json.load(open(USD_RATE_FILE, "r", encoding="utf-8"))
+            if data.get("updated_at") == hoy:
+                return float(data["usd_to_cop"])
+        except:
+            pass
+
+    # 🍐 2. Pedir tasa REAL a internet
+    try:
+        r = requests.get(
+            "https://api.exchangerate.host/latest?base=USD&symbols=COP",
+            timeout=5
+        )
+        rate = r.json()["rates"]["COP"]
+
+        # 🧃 Guardar para hoy
+        json.dump({
+            "usd_to_cop": rate,
+            "updated_at": hoy
+        }, open(USD_RATE_FILE, "w", encoding="utf-8"))
+
+        return float(rate)
+
+    # 🛟 3. Salvavidas
+    except:
+        return 4100
+
 
 def generar_token():
     return uuid.uuid4().hex
@@ -1131,16 +1165,22 @@ def crear_suscripcion_mp():
     email = data.get("email")
     plan = data.get("plan")
 
+    # 🍎 Validaciones
     if not email or plan not in PLANES_USD:
         return jsonify({"ok": False, "error": "datos_invalidos"}), 400
 
+    # 🍐 Conversión REAL
+    usd_to_cop = obtener_tasa_usd_cop()
+    amount_cop = int(PLANES_USD[plan] * usd_to_cop)
+
+    # 🧾 Suscripción MercadoPago
     preapproval = {
         "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
         "payer_email": email,
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
-            "transaction_amount": MP_INTERNAL_AMOUNT[plan],
+            "transaction_amount": amount_cop,
             "currency_id": "COP"
         },
         "back_url": "https://stripe-backend-r14f.onrender.com/mp/success",
@@ -1149,15 +1189,19 @@ def crear_suscripcion_mp():
 
     result = mp.preapproval().create(preapproval)
 
+    # 🚨 Error MP
     if result.get("status") != 201:
         print("❌ MP error:", result["response"])
         return jsonify({"ok": False, "error": result["response"]}), 500
 
+    # ✅ OK
     return jsonify({
         "ok": True,
-        "pay_url": result["response"]["init_point"]
+        "pay_url": result["response"]["init_point"],
+        "usd_price": PLANES_USD[plan],
+        "cop_amount": amount_cop,
+        "rate_used": usd_to_cop
     })
-
 
 
 
@@ -2220,6 +2264,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
