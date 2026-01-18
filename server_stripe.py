@@ -46,7 +46,7 @@ if not os.path.exists(DATA_DIR):
 
 mp = mercadopago.SDK(get_mp_access_token())
 
-print("🧪 MP MODE:", MP_MODE)
+
 MP_MODE = os.getenv("MP_MODE", "prod").lower()
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -190,7 +190,9 @@ def get_mp_access_token():
     if not token:
         raise RuntimeError("❌ MercadoPago Access Token no configurado")
 
+    print(f"🧪 MP MODE: {MP_MODE}")
     return token
+
 
 
 def generar_token():
