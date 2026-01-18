@@ -1088,7 +1088,7 @@ def crear_pago_mp():
             "currency_id": "COP"
         }],
         "payer": {"email": email},
-        "notification_url": "https://TU_DOMINIO/webhooks/mercadopago",
+        "notification_url": "https://stripe-backend-r14f.onrender.com/webhooks/mercadopago",
         "auto_return": "approved",
         "external_reference": f"{email}|{plan}"
     }
@@ -1100,6 +1100,8 @@ def crear_pago_mp():
         "pay_url": result["response"]["init_point"]
     })
 
+pagos_procesados = set()
+
 @app.route("/webhooks/mercadopago", methods=["POST"])
 def webhook_mp():
     data = request.json
@@ -1108,17 +1110,31 @@ def webhook_mp():
         return "ok", 200
 
     payment_id = data["data"]["id"]
-    payment = mp.payment().get(payment_id)["response"]
 
-    if payment["status"] != "approved":
+    # 🔒 Evitar doble procesamiento
+    if payment_id in pagos_procesados:
         return "ok", 200
 
-    ref = payment["external_reference"]
-    email, plan = ref.split("|")
+    payment = mp.payment().get(payment_id)["response"]
+
+    if payment.get("status") != "approved":
+        return "ok", 200
+
+    ref = payment.get("external_reference", "")
+    if "|" not in ref:
+        return "ok", 200
+
+    email, plan = ref.split("|", 1)
+
+    if plan not in ["pro", "agency"]:
+        return "ok", 200
 
     activar_licencia(email, plan)
 
+    pagos_procesados.add(payment_id)
+
     return "ok", 200
+
 
 
 @app.route("/metrics/generation-start", methods=["POST"])
