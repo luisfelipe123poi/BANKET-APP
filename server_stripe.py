@@ -1135,6 +1135,39 @@ def webhook_mp():
 
     return "ok", 200
 
+@app.route("/webhooks/mercadopago", methods=["POST"])
+def webhook_mp():
+    data = request.json
+    action = data.get("action")
+
+    if action != "payment.updated":
+        return jsonify({"ok": True})
+
+    payment_id = data["data"]["id"]
+
+    payment = mp.payment().get(payment_id)
+    info = payment["response"]
+
+    if info["status"] != "approved":
+        return jsonify({"ok": True})
+
+    email, plan = info["external_reference"].split("|")
+
+    PLAN_CREDITS = {
+        "starter": 100,
+        "pro": 300,
+        "agency": 1200
+    }
+
+    save_license(
+        license_key=gen_license(),
+        email=email,
+        plan=plan,
+        credits=PLAN_CREDITS[plan],
+        status="active"
+    )
+
+    return jsonify({"ok": True})
 
 
 @app.route("/metrics/generation-start", methods=["POST"])
@@ -2155,6 +2188,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
