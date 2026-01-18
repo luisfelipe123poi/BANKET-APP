@@ -45,6 +45,8 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
 mp = mercadopago.SDK(get_mp_access_token())
+
+print("🧪 MP MODE:", MP_MODE)
 MP_MODE = os.getenv("MP_MODE", "prod").lower()
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -181,8 +183,15 @@ def obtener_tasa_usd_cop():
 
 def get_mp_access_token():
     if MP_MODE == "test":
-        return os.getenv("MP_ACCESS_TOKEN_TEST")
-    return os.getenv("MP_ACCESS_TOKEN_PROD")
+        token = os.getenv("MP_ACCESS_TOKEN_TEST")
+    else:
+        token = os.getenv("MP_ACCESS_TOKEN_PROD")
+
+    if not token:
+        raise RuntimeError("❌ MercadoPago Access Token no configurado")
+
+    return token
+
 
 def generar_token():
     return uuid.uuid4().hex
