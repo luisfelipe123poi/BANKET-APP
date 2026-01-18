@@ -1182,23 +1182,18 @@ def crear_suscripcion_mp():
     email = data.get("email")
     plan = data.get("plan")
 
-    #  Validaciones
     if not email or plan not in PLANES_USD:
         return jsonify({"ok": False, "error": "datos_invalidos"}), 400
 
-    #  Conversión USD → COP (REAL)
     usd_to_cop = obtener_tasa_usd_cop()
     amount_cop = int(PLANES_USD[plan] * usd_to_cop)
 
-    #  En modo TEST, el payer_email DEBE ser usuario de prueba
-    payer_email = email
-
-    if MP_MODE == "test":
-        # MercadoPago TEST ignora emails reales
-        # Usa el email fake que tú decidas
+    # 🔥 EMAIL SEGÚN MODO
+    if MP_ENV == "test":
         payer_email = "test_user_123@test.com"
+    else:
+        payer_email = email
 
-    # 🧾 Crear suscripción
     preapproval = {
         "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
         "payer_email": payer_email,
@@ -1214,24 +1209,20 @@ def crear_suscripcion_mp():
 
     result = mp.preapproval().create(preapproval)
 
-    # 🚨 Error MercadoPago
     if result.get("status") not in (200, 201):
         print("❌ MP error:", result.get("response"))
         return jsonify({
             "ok": False,
             "error": result.get("response"),
-            "mode": MP_MODE
+            "mode": MP_ENV
         }), 500
 
-    # ✅ OK
     return jsonify({
         "ok": True,
         "pay_url": result["response"]["init_point"],
-        "usd_price": PLANES_USD[plan],
-        "cop_amount": amount_cop,
-        "rate_used": usd_to_cop,
-        "mode": MP_MODE
+        "mode": MP_ENV
     })
+
 
 
 
