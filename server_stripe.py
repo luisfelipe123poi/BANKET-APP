@@ -44,8 +44,8 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-mp = mercadopago.SDK(os.getenv("MP_ACCESS_TOKEN"))
-
+mp = mercadopago.SDK(get_mp_access_token())
+MP_MODE = os.getenv("MP_MODE", "prod").lower()
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -179,6 +179,10 @@ def obtener_tasa_usd_cop():
     except:
         return 4100
 
+def get_mp_access_token():
+    if MP_MODE == "test":
+        return os.getenv("MP_ACCESS_TOKEN_TEST")
+    return os.getenv("MP_ACCESS_TOKEN_PROD")
 
 def generar_token():
     return uuid.uuid4().hex
@@ -1163,22 +1167,30 @@ def crear_pago_mp():
 
 @app.route("/payments/mp/subscribe", methods=["POST"])
 def crear_suscripcion_mp():
-    data = request.json
+    data = request.json or {}
     email = data.get("email")
     plan = data.get("plan")
 
-    # 🍎 Validaciones
+    #  Validaciones
     if not email or plan not in PLANES_USD:
         return jsonify({"ok": False, "error": "datos_invalidos"}), 400
 
-    # 🍐 Conversión REAL
+    #  Conversión USD → COP (REAL)
     usd_to_cop = obtener_tasa_usd_cop()
     amount_cop = int(PLANES_USD[plan] * usd_to_cop)
 
-    # 🧾 Suscripción MercadoPago
+    #  En modo TEST, el payer_email DEBE ser usuario de prueba
+    payer_email = email
+
+    if MP_MODE == "test":
+        # MercadoPago TEST ignora emails reales
+        # Usa el email fake que tú decidas
+        payer_email = "test_user_123@test.com"
+
+    # 🧾 Crear suscripción
     preapproval = {
         "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
-        "payer_email": email,
+        "payer_email": payer_email,
         "auto_recurring": {
             "frequency": 1,
             "frequency_type": "months",
@@ -1191,10 +1203,14 @@ def crear_suscripcion_mp():
 
     result = mp.preapproval().create(preapproval)
 
-    # 🚨 Error MP
-    if result.get("status") != 201:
-        print("❌ MP error:", result["response"])
-        return jsonify({"ok": False, "error": result["response"]}), 500
+    # 🚨 Error MercadoPago
+    if result.get("status") not in (200, 201):
+        print("❌ MP error:", result.get("response"))
+        return jsonify({
+            "ok": False,
+            "error": result.get("response"),
+            "mode": MP_MODE
+        }), 500
 
     # ✅ OK
     return jsonify({
@@ -1202,7 +1218,8 @@ def crear_suscripcion_mp():
         "pay_url": result["response"]["init_point"],
         "usd_price": PLANES_USD[plan],
         "cop_amount": amount_cop,
-        "rate_used": usd_to_cop
+        "rate_used": usd_to_cop,
+        "mode": MP_MODE
     })
 
 
