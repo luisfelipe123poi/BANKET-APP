@@ -18,8 +18,6 @@ from flask import redirect
 from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
 import sqlite3
-import mercadopago
-from datetime import date
 
 
 
@@ -37,7 +35,6 @@ print("🔍 AZURE REGION:", os.getenv("AZURE_SPEECH_REGION"))
 
 
 import os
-USD_RATE_FILE = "usd_rate.json"
 
 DATA_DIR = "/var/data"
 
@@ -46,8 +43,6 @@ if not os.path.exists(DATA_DIR):
 
 
 
-
-MP_MODE = os.getenv("MP_MODE", "prod").lower()
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -79,17 +74,6 @@ DB_PATH = os.path.join(DATA_DIR, "database.db")
 
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
-PLANES_USD = {
-    "starter": 19,
-    "pro": 49,
-    "agency": 149
-}
-
-MP_INTERNAL_AMOUNT = {
-    "starter": 19000,
-    "pro": 49000,
-    "agency": 149000
-}
 
 
 # Carga de .env si existe
@@ -148,52 +132,6 @@ def home():
 # SISTEMA DE TOKENS PARA EMAIL
 # ======================================
 tokens_db = {}
-
-def obtener_tasa_usd_cop():
-    hoy = date.today().isoformat()
-
-    # 🍎 1. Si ya existe tasa de HOY → usarla
-    if os.path.exists(USD_RATE_FILE):
-        try:
-            data = json.load(open(USD_RATE_FILE, "r", encoding="utf-8"))
-            if data.get("updated_at") == hoy:
-                return float(data["usd_to_cop"])
-        except:
-            pass
-
-    # 🍐 2. Pedir tasa REAL a internet
-    try:
-        r = requests.get(
-            "https://api.exchangerate.host/latest?base=USD&symbols=COP",
-            timeout=5
-        )
-        rate = r.json()["rates"]["COP"]
-
-        # 🧃 Guardar para hoy
-        json.dump({
-            "usd_to_cop": rate,
-            "updated_at": hoy
-        }, open(USD_RATE_FILE, "w", encoding="utf-8"))
-
-        return float(rate)
-
-    # 🛟 3. Salvavidas
-    except:
-        return 4100
-
-def get_mp_access_token():
-    if MP_MODE == "test":
-        token = os.getenv("MP_ACCESS_TOKEN_TEST")
-    else:
-        token = os.getenv("MP_ACCESS_TOKEN_PROD")
-
-    if not token:
-        raise RuntimeError("❌ MercadoPago Access Token no configurado")
-
-    print(f"🧪 MP MODE: {MP_MODE}")
-    return token
-
-mp = mercadopago.SDK(get_mp_access_token())
 
 def generar_token():
     return uuid.uuid4().hex
@@ -1127,153 +1065,6 @@ def get_license_by_device(device_id):
         if isinstance(meta, dict) and meta.get("device_id") == device_id:
             return lic
     return None
-
-@app.route("/payments/mp/create", methods=["POST"])
-def crear_pago_mp():
-    data = request.json
-    email = data.get("email")
-    plan = data.get("plan")
-
-    PLANES = {
-        "starter": 19000,
-        "pro": 49000,
-        "agency": 149000
-    }
-
-    if plan not in PLANES:
-        return jsonify({"ok": False}), 400
-
-    preference = {
-        "items": [{
-            "title": f"TurboClips Plan {plan}",
-            "quantity": 1,
-            "unit_price": PLANES[plan],
-            "currency_id": "COP"
-        }],
-        "payer": {"email": email},
-        "external_reference": f"{email}|{plan}",
-
-        # 🔥 ESTO ES LO QUE FALTABA
-        "back_urls": {
-            "success": "https://stripe-backend-r14f.onrender.com/mp/success",
-            "failure": "https://stripe-backend-r14f.onrender.com/mp/failure",
-            "pending": "https://stripe-backend-r14f.onrender.com/mp/pending"
-        },
-        "auto_return": "approved"
-    }
-
-    result = mp.preference().create(preference)
-    response = result.get("response", {})
-
-    pay_url = response.get("init_point") or response.get("sandbox_init_point")
-
-    if not pay_url:
-        print("❌ MercadoPago response:", response)
-        return jsonify({"ok": False}), 500
-
-    return jsonify({
-        "ok": True,
-        "pay_url": pay_url
-    })
-
-@app.route("/payments/mp/subscribe", methods=["POST"])
-def crear_suscripcion_mp():
-    data = request.json or {}
-    email = data.get("email")
-    plan = data.get("plan")
-
-    #  Validaciones
-    if not email or plan not in PLANES_USD:
-        return jsonify({"ok": False, "error": "datos_invalidos"}), 400
-
-    #  Conversión USD → COP (REAL)
-    usd_to_cop = obtener_tasa_usd_cop()
-    amount_cop = int(PLANES_USD[plan] * usd_to_cop)
-
-    #  En modo TEST, el payer_email DEBE ser usuario de prueba
-    payer_email = email
-
-    if MP_MODE == "test":
-        # MercadoPago TEST ignora emails reales
-        # Usa el email fake que tú decidas
-        payer_email = "test_user_123@test.com"
-
-    # 🧾 Crear suscripción
-    preapproval = {
-        "reason": f"TurboClips {plan.upper()} — ${PLANES_USD[plan]} USD / month",
-        "payer_email": payer_email,
-        "auto_recurring": {
-            "frequency": 1,
-            "frequency_type": "months",
-            "transaction_amount": amount_cop,
-            "currency_id": "COP"
-        },
-        "back_url": "https://stripe-backend-r14f.onrender.com/mp/success",
-        "external_reference": f"{email}|{plan}"
-    }
-
-    result = mp.preapproval().create(preapproval)
-
-    # 🚨 Error MercadoPago
-    if result.get("status") not in (200, 201):
-        print("❌ MP error:", result.get("response"))
-        return jsonify({
-            "ok": False,
-            "error": result.get("response"),
-            "mode": MP_MODE
-        }), 500
-
-    # ✅ OK
-    return jsonify({
-        "ok": True,
-        "pay_url": result["response"]["init_point"],
-        "usd_price": PLANES_USD[plan],
-        "cop_amount": amount_cop,
-        "rate_used": usd_to_cop,
-        "mode": MP_MODE
-    })
-
-
-
-
-@app.route("/webhooks/mercadopago", methods=["POST"])
-def webhook_mp():
-    data = request.json or {}
-
-    tipo = data.get("type")
-
-    # ==========================
-    # 🔁 SUSCRIPCIONES
-    # ==========================
-    if tipo == "preapproval":
-        preapproval_id = data["data"]["id"]
-        info = mp.preapproval().get(preapproval_id)["response"]
-
-        if info["status"] != "authorized":
-            return "ok", 200
-
-        email, plan = info["external_reference"].split("|")
-        activar_licencia(email, plan)
-        return "ok", 200
-
-    # ==========================
-    # 💳 PAGOS ÚNICOS
-    # ==========================
-    if tipo == "payment":
-        payment_id = data["data"]["id"]
-        info = mp.payment().get(payment_id)["response"]
-
-        if info["status"] != "approved":
-            return "ok", 200
-
-        email, plan = info["external_reference"].split("|")
-        procesar_pago_unico(email, plan)
-        return "ok", 200
-
-    return "ok", 200
-
-
-
 
 
 @app.route("/metrics/generation-start", methods=["POST"])
@@ -2294,16 +2085,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
-
-
-
-
-
-
-
-
 
 
 
