@@ -113,6 +113,25 @@ EVENTS_VALIDOS = {
     "generation_error"
 }
 
+# ======================
+# 💳 MERCADOPAGO CONFIG
+# ======================
+
+MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+MP_PUBLIC_KEY = os.getenv("MP_PUBLIC_KEY")
+
+if not MP_ACCESS_TOKEN:
+    print("⚠️ MP_ACCESS_TOKEN no configurado")
+
+mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
+
+MP_PLANS = {
+    "starter": os.getenv("MP_PLAN_STARTER"),
+    "pro": os.getenv("MP_PLAN_PRO"),
+    "agency": os.getenv("MP_PLAN_AGENCY"),
+}
+
+
 
 app = Flask(
     __name__,
@@ -640,6 +659,100 @@ def request_code():
 
     return jsonify({"ok": True, "msg": "Código enviado"})
 
+@app.route("/mp/create_preference", methods=["POST"])
+def mp_create_preference():
+    data = request.json or {}
+
+    email = data.get("email")
+    plan = data.get("plan")  # starter | pro | agency
+
+    if not email or plan not in MP_PLANS:
+        return jsonify({"error": "invalid_data"}), 400
+
+    plan_id = MP_PLANS.get(plan)
+
+    preference_data = {
+        "payer": {
+            "email": email
+        },
+        "items": [
+            {
+                "title": f"TurboClips Plan {plan.capitalize()}",
+                "quantity": 1,
+                "unit_price": 1  # ⚠️ NO importa si usas plan_id
+            }
+        ],
+        "subscription_plan_id": plan_id,
+        "back_urls": {
+            "success": f"{PUBLIC_DOMAIN}/success",
+            "failure": f"{PUBLIC_DOMAIN}/cancel"
+        },
+        "auto_return": "approved",
+
+        "notification_url": f"{PUBLIC_DOMAIN}/mp/webhook"
+    }
+
+    preference = mp_sdk.preference().create(preference_data)
+
+    return jsonify({
+        "init_point": preference["response"]["init_point"],
+        "id": preference["response"]["id"]
+    })
+
+@app.route("/mp/webhook", methods=["POST"])
+def mp_webhook():
+    data = request.json
+
+    if not data:
+        return "ok", 200
+
+    topic = data.get("type") or data.get("topic")
+
+    if topic not in ("payment", "subscription"):
+        return "ok", 200
+
+    resource_id = data.get("data", {}).get("id")
+
+    try:
+        payment = mp_sdk.payment().get(resource_id)
+        payment_data = payment["response"]
+
+        if payment_data.get("status") != "approved":
+            return "ok", 200
+
+        email = payment_data["payer"]["email"]
+        plan = payment_data["description"].lower()
+
+        # MAPEAR plan
+        if "starter" in plan:
+            plan_key = "starter"
+            credits = 100
+        elif "pro" in plan:
+            plan_key = "pro"
+            credits = 300
+        elif "agency" in plan:
+            plan_key = "agency"
+            credits = 1200
+        else:
+            return "ok", 200
+
+        license_key = gen_license()
+
+        save_license(
+            license_key=license_key,
+            email=email,
+            plan=plan_key,
+            credits=credits,
+            status="active",
+            metadata={"source": "mercadopago"}
+        )
+
+        print(f"✅ Licencia creada vía MercadoPago: {email} | {plan_key}")
+
+    except Exception as e:
+        print("❌ Error MP webhook:", e)
+
+    return "ok", 200
 
 
 @app.route("/license/info", methods=["GET"])
@@ -688,6 +801,15 @@ def use_credit():
         "ok": True,
         "credits_left": lic["credits_left"] - 1
     })
+
+@app.route("/mp/success")
+def mp_success():
+    return redirect("/success")
+
+@app.route("/mp/failure")
+def mp_failure():
+    return redirect("/cancel")
+
 
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
