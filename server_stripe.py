@@ -41,8 +41,9 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
+VALID_REFERRER_CODE = "PARTNER01"
 
-
+DB_PATH = "licenses.db"
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -113,12 +114,45 @@ EVENTS_VALIDOS = {
     "generation_error"
 }
 
+def ensure_db_schema():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
 
+    cur.execute("PRAGMA table_info(licenses)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    if "credits_left" not in cols:
+        print("🛠️ Agregando columna credits_left")
+        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
+
+    if "expires_at" not in cols:
+        print("🛠️ Agregando columna expires_at")
+        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
+
+    # 🔥 NUEVO
+    if "referrer_code" not in cols:
+        print("🛠️ Agregando columna referrer_code")
+        cur.execute("ALTER TABLE licenses ADD COLUMN referrer_code TEXT")  
+
+        # 🔥 asegurar referrer_code en email_verification_tokens
+    cur.execute("PRAGMA table_info(email_verification_tokens)")
+    cols_tokens = [c[1] for c in cur.fetchall()]
+
+    if "referrer_code" not in cols_tokens:
+        print("🛠️ Agregando columna referrer_code a email_verification_tokens")
+        cur.execute(
+            "ALTER TABLE email_verification_tokens ADD COLUMN referrer_code TEXT"
+        )
+
+
+    conn.commit()
+    conn.close()
+    
 app = Flask(
     __name__,
     template_folder="templates"
 )
-
+ensure_db_schema()
 
 
 # ------------------------------------------------------------
@@ -227,6 +261,7 @@ def dashboard_metrics():
     conn = get_db_connection()
     cur = conn.cursor()
 
+    # 📊 METRICS
     cur.execute("""
         SELECT 
            DATE(created_at) as dia,
@@ -237,14 +272,53 @@ def dashboard_metrics():
         FROM metrics
         GROUP BY dia
         ORDER BY dia DESC
-
-
     """)
+    rows = cur.fetchall()   # ✅ AQUÍ
 
-    rows = cur.fetchall()
+    # 🤝 REFERRERS
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) AS total_licencias,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS ventas
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+        ORDER BY ventas DESC
+    """)
+    referrers = [dict(r) for r in cur.fetchall()]  # ✅ AQUÍ
+
     conn.close()
 
-    return render_template("dashboard_metrics.html", data=rows)
+    return render_template(
+        "dashboard_metrics.html",
+        data=rows,
+        referrers=referrers
+    )
+
+
+
+
+@app.route("/dashboard/referrers")
+def dashboard_referrers():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) as total_licencias,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) as ventas
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+    """)
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    return jsonify(rows)
+    
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -291,7 +365,8 @@ def save_license(
     stripe_subscription_id=None,
     status="active",
     expires_at=None,
-    metadata=None
+    metadata=None,
+    referrer_code=None
 ):
     """
     Guarda una licencia nueva en la base de datos.
@@ -316,9 +391,10 @@ def save_license(
             stripe_customer_id,
             stripe_subscription_id,
             expires_at,
-            metadata
+            metadata,
+            referrer_code
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
     """, (
         license_key,
@@ -330,7 +406,8 @@ def save_license(
         stripe_customer_id,
         stripe_subscription_id,
         expires_at,
-        json.dumps(metadata or {})
+        json.dumps(metadata or {}),
+        referrer_code
     ))
 
 
@@ -390,6 +467,17 @@ def init_db():
         );
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS referrers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            owner_email TEXT,
+            active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
 
     conn.commit()
     conn.close()
@@ -399,24 +487,8 @@ def init_db():
 init_db()
 
 
-# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
-def ensure_db_schema():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
 
-    cur.execute("PRAGMA table_info(licenses)")
-    cols = [c[1] for c in cur.fetchall()]
 
-    if "credits_left" not in cols:
-        print("🛠️ Agregando columna credits_left")
-        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
-
-    if "expires_at" not in cols:
-        print("🛠️ Agregando columna expires_at")
-        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
-
-    conn.commit()
-    conn.close()
 
 
 
@@ -539,13 +611,25 @@ def adjust_credits_left(license_key, delta):
 
 @app.route("/auth/request_verification", methods=["POST"])
 def request_verification():
-    data = request.json
+    data = request.json or {}
     email = (data.get("email") or "").strip().lower()
+
+    # 🔥 referrer opcional
+    referrer_code = (data.get("referrer_code") or "").strip().upper()
+
+    # aceptar SOLO el código fijo
+    if referrer_code and referrer_code != "PARTNER01":
+        return jsonify({
+            "ok": False,
+            "error": "invalid_referrer_code",
+            "message": "El código PARTNER no es válido."
+        }), 400
+
 
     if not email:
         return jsonify({"ok": False, "error": "missing_email"})
 
-    # 🔥 SI YA EXISTE LICENCIA → NO reenviar correo, NO insertar token
+    # 🔒 si ya existe licencia → no reenviar correo
     existing = get_license_by_email(email)
     if existing:
         return jsonify({
@@ -555,24 +639,34 @@ def request_verification():
             "license": existing
         })
 
-    # Enviar token SOLO si NO existe licencia
     token = generar_token()
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # 🔥 SOLUCIÓN: insertar o actualizar token si el email ya existe
+    # ⚠️ limpiamos tokens previos de ese email
+    cur.execute(
+        "DELETE FROM email_verification_tokens WHERE email = ?",
+        (email,)
+    )
+
+    # insertamos token nuevo
     cur.execute("""
-        INSERT INTO email_verification_tokens (email, token, used, created_at)
-        VALUES (?, ?, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT(token) DO UPDATE SET  
-            token = excluded.token,
-            used = 0,
-            created_at = CURRENT_TIMESTAMP;
-    """, (email, token))
+        INSERT INTO email_verification_tokens (
+            email,
+            token,
+            used,
+            created_at,
+            referrer_code
+        )
+        VALUES (?, ?, 0, CURRENT_TIMESTAMP, ?)
+
+    """, (email, token, referrer_code))
 
     conn.commit()
     conn.close()
+
+    
 
     enviar_correo_verificacion(email, token)
 
@@ -581,7 +675,8 @@ def request_verification():
         "message": "Correo de verificación enviado."
     })
 
-def create_free_license_internal(email):
+
+def create_free_license_internal(email, referrer_code=None):
     """
     Crea una licencia FREE cuando un usuario verifica su correo.
     Si ya existe una licencia (free o de pago), NO crea otra.
@@ -615,10 +710,11 @@ def create_free_license_internal(email):
         status="active",
         expires_at=None,
         metadata={"source": "email_verification"},
-        credits=credits
+        credits=credits,
+        referrer_code=referrer_code
     )
 
-    print(f"🎁 Licencia FREE creada para {email}: {license_key}")
+    print(f"🎁 Licencia FREE creada para {email}: {license_key} | referrer={referrer_code}")
 
     return {
         "ok": True,
@@ -627,6 +723,31 @@ def create_free_license_internal(email):
         "plan": "free",
         "credits": credits
     }
+
+
+@app.route("/referrer/validate", methods=["POST"])
+def validate_referrer():
+    data = request.get_json() or {}
+    code = (data.get("code") or "").strip().upper()
+
+    if not code:
+        return jsonify({"ok": False, "error": "code_required"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT code FROM referrers WHERE code = ? AND active = 1",
+        (code,)
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"ok": False, "valid": False}), 200
+
+    return jsonify({"ok": True, "valid": True}), 200
+
 
 @app.route("/auth/request_code", methods=["POST"])
 def request_code():
@@ -698,14 +819,29 @@ def create_checkout():
         return jsonify({"ok": False, "error": "email y priceId son requeridos"}), 400
 
     try:
+        license = get_license_by_email(email)
+
+        if not license:
+            return jsonify({
+                "ok": False,
+                "error": "license_not_found"
+            }), 404
+
+        referrer_code = license.get("referrer_code")
+
         session = stripe.checkout.Session.create(
             customer_email=email,
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
+            metadata={
+                "referrer_code": referrer_code or ""
+            },
             success_url="https://stripe-backend-r14f.onrender.com/success?session_id={CHECKOUT_SESSION_ID}",
             cancel_url="https://stripe-backend-r14f.onrender.com/cancel",
         )
+
         return redirect(session.url, code=302)
+
 
     except Exception as e:
         print("❌ Error creando checkout:", e)
@@ -747,7 +883,7 @@ def verify():
     # Buscar token
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT email, used FROM email_verification_tokens WHERE token = ?", (token,))
+    cur.execute("SELECT email, used, referrer_code FROM email_verification_tokens WHERE token = ?", (token,))
     row = cur.fetchone()
     conn.close()
 
@@ -756,6 +892,7 @@ def verify():
 
     email = row["email"].strip().lower()
     used = row["used"]
+    referrer_code = row["referrer_code"]
 
     # Si ya fue usado antes → correo ya verificado
     if used:
@@ -807,7 +944,8 @@ def verify():
         credits=10,
         credits_left=10,
         status="active",
-        expires_at=expires_at   # ← AGREGADO
+        expires_at=expires_at,   # ← AGREGADO
+        referrer_code=referrer_code
     )
 
     lic = get_license_by_email(email)
@@ -1100,6 +1238,74 @@ def metric_generation_success():
 
     return jsonify({"ok": True})
 
+@app.route("/stats/referrers", methods=["GET"])
+def stats_referrers():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            referrer_code,
+            COUNT(*) AS total_licenses,
+            SUM(CASE WHEN plan != 'free' THEN 1 ELSE 0 END) AS paid_licenses
+        FROM licenses
+        WHERE referrer_code IS NOT NULL
+        GROUP BY referrer_code
+        ORDER BY paid_licenses DESC
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    data = []
+    for r in rows:
+        data.append({
+            "referrer_code": r["referrer_code"],
+            "total_licenses": r["total_licenses"],
+            "paid_licenses": r["paid_licenses"]
+        })
+
+    return jsonify({
+        "ok": True,
+        "referrers": data
+    })
+
+@app.route("/stats/referrer/<code>", methods=["GET"])
+def stats_referrer_detail(code):
+    code = code.strip().upper()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            email,
+            plan,
+            credits,
+            created_at
+        FROM licenses
+        WHERE referrer_code = ?
+        ORDER BY created_at DESC
+    """, (code,))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    licenses = []
+    for r in rows:
+        licenses.append({
+            "email": r["email"],
+            "plan": r["plan"],
+            "credits": r["credits"],
+            "created_at": r["created_at"]
+        })
+
+    return jsonify({
+        "ok": True,
+        "referrer_code": code,
+        "total": len(licenses),
+        "licenses": licenses
+    })
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
@@ -1424,6 +1630,7 @@ def redeem_license():
             stripe_customer_id=customer_id,
             stripe_subscription_id=subscription_id,
             status="active",
+            referrer_code=referrer_code,
         )
 
 
@@ -1741,7 +1948,8 @@ def local_license_create():
         status="active",
         expires_at=expires_at,
         metadata=metadata,
-        credits=credits
+        credits=credits,
+        referrer_code=referrer_code
     )
 
     # Return the full license object (app expects license payload)
@@ -2085,6 +2293,21 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
