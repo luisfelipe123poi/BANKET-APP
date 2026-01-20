@@ -18,6 +18,7 @@ from flask import redirect
 from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
 import sqlite3
+import mercadopago
 
 
 
@@ -2207,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
