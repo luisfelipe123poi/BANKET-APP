@@ -1972,7 +1972,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "https://drive.google.com/file/d/1_ruyZBqPja6QYF_YFSk3UQU7iliKZAjq/view?usp=sharing",
+            "image": "https://drive.google.com/uc?export=download&id=1_ruyZBqPja6QYF_YFSk3UQU7iliKZAjq",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -2004,7 +2004,7 @@ def ads_popup():
         },
         {
             "image": "https://drive.google.com/uc?export=download&id=1-3r9jLKilue5pBUItsj8DuYE0x0coWjA",
-            "cta_url": "https://tusitio.com/oferta5"
+            "cta_url": "https://tusitio.com/oferta4"
         }
 
     ]
@@ -2208,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
