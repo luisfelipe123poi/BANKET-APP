@@ -1995,15 +1995,15 @@ def ads_popup():
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "https://drive.google.com/uc?export=1CCzNw0OhmX47zWIC9LLmfJGsZyTm2bkk",
+            "image": "https://drive.google.com/uc?export=download&id=1CCzNw0OhmX47zWIC9LLmfJGsZyTm2bkk",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "https://drive.google.com/uc?export=1vLtHq_MtSUt2DYS94czkkGBjchTGiaj1",
+            "image": "https://drive.google.com/file/d/1vLtHq_MtSUt2DYS94czkkGBjchTGiaj1/view?usp=sharing",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "https://drive.google.com/uc?export=1sjwRK_c_v72LjcbELBW_DoiY2RBaiRkB",
+            "image": "https://drive.google.com/uc?export=download&id=1PYIb0nizX7Oaa4LR7LS_CSD0vzjZDR6m",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -2208,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
