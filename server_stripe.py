@@ -1987,7 +1987,7 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "https://drive.google.com/uc?export=download&id=18yvnuSAt2T--2t4xPywbpIe21A87aS9a",
+            "image": "https://drive.google.com/uc?export=download&id=1f3OcqaCYRXO1j5eCjGhhufu9mIODuuau",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
@@ -2208,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
