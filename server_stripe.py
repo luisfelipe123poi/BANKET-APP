@@ -1972,7 +1972,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "https://drive.google.com/uc?export=download&id=14MrC893KcbjNPu0B5V82eDBY92OionIM",
+            "image": "https://drive.google.com/file/d/1_ruyZBqPja6QYF_YFSk3UQU7iliKZAjq/view?usp=sharing",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -1987,23 +1987,23 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "https://drive.google.com/uc?export=download&id=1f3OcqaCYRXO1j5eCjGhhufu9mIODuuau",
+            "image": "https://drive.google.com/uc?export=download&id=1WQQOj5kguWDhyMe8SVaNFNMHqVIVCBxB",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1EK2dvNsGzA34z-pjNwzJGuRfNI8Qyilj",
+            "image": "https://drive.google.com/uc?export=download&id=1efR38e-qtgtrPRGuTC6HWOx_p9gVQfK6",
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1CCzNw0OhmX47zWIC9LLmfJGsZyTm2bkk",
+            "image": "https://drive.google.com/file/d/1hB3K5stcbBV8DWqk69Rez51rTYPmOKCc/view?usp=sharing",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "https://drive.google.com/file/d/1vLtHq_MtSUt2DYS94czkkGBjchTGiaj1/view?usp=sharing",
+            "image": "https://drive.google.com/uc?export=download&id=1mSChZOUDkZfmLDVlTIRiXZbWgDk-7t6M",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1PYIb0nizX7Oaa4LR7LS_CSD0vzjZDR6m",
+            "image": "https://drive.google.com/file/d/1-3r9jLKilue5pBUItsj8DuYE0x0coWjA/view?usp=sharing",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -2208,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
