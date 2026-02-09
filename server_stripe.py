@@ -1972,7 +1972,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "https://drive.google.com/uc?export=download&id=1FmzuVNOrZ62kN3Vhsq7y-Jr2rDnsmzjh",
+            "image": "https://drive.google.com/uc?export=download&id=14MrC893KcbjNPu0B5V82eDBY92OionIM",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -1987,23 +1987,23 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "https://drive.google.com/uc?export=download&id=1Z5CTKCq79PcUaWycIJ_2898waMseWROD",
+            "image": "https://drive.google.com/uc?export=download&id=18yvnuSAt2T--2t4xPywbpIe21A87aS9a",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=15JzTgtE7IFyW6zI2kxRiAx3OOc7CFb_J",
+            "image": "https://drive.google.com/uc?export=download&id=1EK2dvNsGzA34z-pjNwzJGuRfNI8Qyilj",
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1WGs5_omS7-nlEJG4ItqJ8FRRNfybMgtu",
+            "image": "https://drive.google.com/uc?export=1CCzNw0OhmX47zWIC9LLmfJGsZyTm2bkk",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1T-9yS9iq9aK1zeh36aFSl5O-sfOIS7kj",
+            "image": "https://drive.google.com/uc?export=1vLtHq_MtSUt2DYS94czkkGBjchTGiaj1",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1CVycJrhDGUzXtmDef_897MYZ0DBCwOBy",
+            "image": "https://drive.google.com/uc?export=1sjwRK_c_v72LjcbELBW_DoiY2RBaiRkB",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -2208,6 +2208,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
