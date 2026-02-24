@@ -19,7 +19,8 @@ from flask import Flask, request, jsonify, render_template
 from flask import Flask, render_template
 import sqlite3
 import mercadopago
-
+from flask import Flask
+from flask_cors import CORS
 
 
 
@@ -42,7 +43,8 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "https://metriclips.com"}})
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -2208,6 +2210,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
