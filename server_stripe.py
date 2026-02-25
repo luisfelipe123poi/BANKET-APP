@@ -43,8 +43,15 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://metriclips.com"}})
+# 1. Creamos la app con todas las configuraciones (nombre y carpeta de templates)
+app = Flask(__name__, template_folder="templates")
+
+# 2. Aplicamos CORS a esa instancia de la app
+CORS(app, resources={r"/*": {
+    "origins": ["https://metriclips.com", "http://127.0.0.1:5500"], # Añadí localhost por si testeas local
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -136,10 +143,7 @@ MP_PLANS = {
 
 
 
-app = Flask(
-    __name__,
-    template_folder="templates"
-)
+
 
 
 
@@ -2210,6 +2214,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
