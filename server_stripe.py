@@ -979,6 +979,15 @@ def get_license_info_dashboard():
         print(f"❌ Error en get_license_info_dashboard: {str(e)}")
         return jsonify({"ok": False, "error": "Error interno del servidor"}), 500
 
+@app.route("/api/debug_db")
+def debug_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT email, license_key FROM licenses")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(ix) for ix in rows])        
+
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
     email = request.args.get("email")
@@ -2423,6 +2432,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
