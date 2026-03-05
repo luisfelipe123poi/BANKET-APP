@@ -884,6 +884,34 @@ def mp_failure():
     return redirect("/cancel")
 
 
+# =============================================================
+# 🛠️ RUTA SOLO PARA PRUEBAS (SIMULADOR DE BOT)
+# =============================================================
+@app.route("/api/test_inject/<license_key>")
+def test_inject(license_key):
+    # Valores de prueba fijos o por parámetros URL
+    vistas = request.args.get('v', 12500)
+    likes = request.args.get('l', 850)
+    ret = request.args.get('r', 65)
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        
+        # Actualizamos la licencia con datos de prueba
+        cur.execute("""
+            UPDATE licenses 
+            SET views = ?, likes = ?, retencion = ? 
+            WHERE license_key = ?
+        """, (vistas, likes, ret, license_key))
+        
+        conn.commit()
+        conn.close()
+        
+        return f"✅ Datos inyectados en {license_key}: {vistas} vistas, {likes} likes, {ret}% retención. <br> Ahora ya puedes probar tu extensión."
+    except Exception as e:
+        return f"❌ Error: {str(e)}"    
+
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
     email = request.args.get("email")
@@ -2328,6 +2356,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
