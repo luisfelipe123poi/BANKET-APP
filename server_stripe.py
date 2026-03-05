@@ -879,105 +879,65 @@ def mp_failure():
     return redirect("/cancel")
 
 
-# =============================================================
-# 🛠️ RUTA PARA PRUEBAS (CORREGIDA PARA TU DB)
-# =============================================================
-@app.route("/api/test_inject/<license_key>")
-def test_inject(license_key):
-    # Recibimos valores de la URL: ?v=100&l=20&r=50
-    # Si no pones nada, usará los valores por defecto (12500, 850, 65)
+@app.route("/api/test_inject/<video_id>")
+def test_inject(video_id):
+    # Valores por defecto si no se pasan por URL
     v = request.args.get('v', 12500)
     l = request.args.get('l', 850)
     r = request.args.get('r', 65)
+    
+    # EL CORREO MAESTRO PARA LA PRUEBA
+    target_email = "luisfe507@gmail.com"
 
     try:
-        # Usamos tu función de conexión existente
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # ACTUALIZACIÓN: Usamos 'views', 'likes' y 'retencion' (nombres reales en tu tabla)
+        # Intentamos actualizar por si ya existe
         cur.execute("""
             UPDATE licenses 
             SET views = ?, likes = ?, retencion = ? 
-            WHERE license_key = ?
-        """, (v, l, r, license_key))
+            WHERE license_key = ? AND email = ?
+        """, (v, l, r, video_id, target_email))
+        
+        # Si no actualizó nada (rowcount == 0), es porque el video no existe para ese correo, lo insertamos
+        if cur.rowcount == 0:
+            cur.execute("""
+                INSERT INTO licenses (license_key, email, plan, status, views, likes, retencion)
+                VALUES (?, ?, 'pro', 'active', ?, ?, ?)
+            """, (video_id, target_email, v, l, r))
         
         conn.commit()
         conn.close()
         
-        return f"""
-        <html>
-            <body style="font-family:sans-serif; text-align:center; padding-top:50px;">
-                <h1 style="color: #00ffaa;">✅ Inyección Exitosa</h1>
-                <p><b>Licencia:</b> {license_key}</p>
-                <p><b>Views (v):</b> {v}</p>
-                <p><b>Likes (l):</b> {l}</p>
-                <p><b>Retención (r):</b> {r}%</p>
-                <hr style="width:200px;">
-                <p>Ahora ve a tu extensión y haz clic en la tarjeta del video #{license_key}</p>
-            </body>
-        </html>
-        """
+        return f"✅ Éxito: Video {video_id} vinculado a {target_email} con {v} views."
     except Exception as e:
-        return f"<h1 style='color:red;'>❌ Error SQL</h1><p>{str(e)}</p>"   
+        return f"❌ Error: {str(e)}"
 
-# =============================================================
-# 🔍 RUTA PARA LEER DATOS DESDE EL MODAL (ACTUALIZADA)
-# =============================================================
 @app.route("/api/license/info", methods=["GET"])
 def get_license_info_dashboard():
-    # El JS ahora envía: /api/license/info?key=1772310264892&email=usuario@correo.com
-    video_id = request.args.get("key")
-    user_email = request.args.get("email")
+    video_id = request.args.get("key", "").strip()
+    user_email = request.args.get("email", "").strip().lower()
 
-    if not video_id:
-        return jsonify({"ok": False, "error": "Falta el ID del video"}), 400
+    if not video_id or not user_email:
+        return jsonify({"ok": False, "error": "Faltan parámetros"}), 400
+
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
     
-    if not user_email:
-        return jsonify({"ok": False, "error": "Sesión no identificada (falta email)"}), 400
+    # Buscamos el video que pertenezca a este correo
+    cur.execute("SELECT * FROM licenses WHERE email = ? AND license_key = ?", (user_email, video_id))
+    row = cur.fetchone()
+    conn.close()
     
-    try:
-        conn = get_db_connection()
-        # Usamos row_factory para obtener un diccionario directamente
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        
-        # BUSQUEDA SEGURA: Filtramos por el ID del video Y el correo del dueño
-        # Nota: En tu tabla 'licenses', 'license_key' guarda el ID del video (ej. 1772310264892)
-        cur.execute("""
-            SELECT * FROM licenses 
-            WHERE email = ? AND license_key = ?
-        """, (user_email, video_id))
-        
-        row = cur.fetchone()
-        conn.close()
-        
-        if not row:
-            # Si no existe, devolvemos un 404 pero con mensaje claro
-            return jsonify({
-                "ok": False, 
-                "error": f"No se encontraron datos para el video {video_id} bajo el correo {user_email}"
-            }), 404
-        
-        # Convertimos la fila de la DB a un diccionario de Python
-        lic_data = dict(row)
-        
-        # Aseguramos que los valores numéricos existan para que el Modal no muestre 'undefined'
+    if not row:
         return jsonify({
-            "ok": True,
-            "license": {
-                "license_key": lic_data.get("license_key"),
-                "views": lic_data.get("views", 0),
-                "likes": lic_data.get("likes", 0),
-                "retencion": lic_data.get("retencion", 0),
-                "status": lic_data.get("status", "active"),
-                "plan": lic_data.get("plan", "starter")
-            }
-        })
-
-    except Exception as e:
-        print(f"❌ Error en get_license_info_dashboard: {str(e)}")
-        return jsonify({"ok": False, "error": "Error interno del servidor"}), 500
+            "ok": False, 
+            "error": f"El video {video_id} no está registrado bajo el correo {user_email}"
+        }), 404
+    
+    return jsonify({"ok": True, "license": dict(row)})
 
 @app.route("/api/debug_db")
 def debug_db():
@@ -2432,6 +2392,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
