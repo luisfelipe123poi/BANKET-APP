@@ -308,6 +308,55 @@ def metrics_event():
     conn.close()
 
     return jsonify({"ok": True})
+
+# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
+def ensure_db_schema():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Obtener columnas actuales para no duplicar
+    cur.execute("PRAGMA table_info(licenses)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    # --- TUS LOGICAS ORIGINALES (NO TOCAR) ---
+    if "credits_left" not in cols:
+        print("🛠️ Agregando columna credits_left")
+        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
+
+    if "expires_at" not in cols:
+        print("🛠️ Agregando columna expires_at")
+        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
+
+    # --- NUEVAS MÉTRICAS TIKTOK (AGREGADAS SIN ELIMINAR NADA) ---
+    
+    # 1. Columna de vinculación (El puente con TikTok)
+    if "tiktok_id" not in cols:
+        print("🛠️ Agregando columna tiktok_id")
+        cur.execute("ALTER TABLE licenses ADD COLUMN tiktok_id TEXT")
+
+    # 2. Métricas de interacción y rendimiento
+    metricas_nuevas = [
+        ("views", "INTEGER DEFAULT 0"),
+        ("likes", "INTEGER DEFAULT 0"),
+        ("comentarios", "INTEGER DEFAULT 0"),
+        ("compartidos", "INTEGER DEFAULT 0"),
+        ("guardados", "INTEGER DEFAULT 0"),
+        ("seguidores", "INTEGER DEFAULT 0"),
+        ("duracion", "REAL DEFAULT 0"),
+        ("retencion", "REAL DEFAULT 0"),
+        ("completado", "REAL DEFAULT 0"),
+        ("t_avg", "REAL DEFAULT 0"),
+        ("watchtime_total", "REAL DEFAULT 0")
+    ]
+
+    for nombre, tipo in metricas_nuevas:
+        if nombre not in cols:
+            print(f"🛠️ Agregando métrica: {nombre}")
+            cur.execute(f"ALTER TABLE licenses ADD COLUMN {nombre} {tipo}")
+
+    conn.commit()
+    conn.close()
+    print("✅ Base de datos verificada y actualizada correctamente.")    
     
     
 
@@ -430,54 +479,7 @@ def init_db():
 init_db()
 
 
-# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
-def ensure_db_schema():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
 
-    # Obtener columnas actuales para no duplicar
-    cur.execute("PRAGMA table_info(licenses)")
-    cols = [c[1] for c in cur.fetchall()]
-
-    # --- TUS LOGICAS ORIGINALES (NO TOCAR) ---
-    if "credits_left" not in cols:
-        print("🛠️ Agregando columna credits_left")
-        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
-
-    if "expires_at" not in cols:
-        print("🛠️ Agregando columna expires_at")
-        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
-
-    # --- NUEVAS MÉTRICAS TIKTOK (AGREGADAS SIN ELIMINAR NADA) ---
-    
-    # 1. Columna de vinculación (El puente con TikTok)
-    if "tiktok_id" not in cols:
-        print("🛠️ Agregando columna tiktok_id")
-        cur.execute("ALTER TABLE licenses ADD COLUMN tiktok_id TEXT")
-
-    # 2. Métricas de interacción y rendimiento
-    metricas_nuevas = [
-        ("views", "INTEGER DEFAULT 0"),
-        ("likes", "INTEGER DEFAULT 0"),
-        ("comentarios", "INTEGER DEFAULT 0"),
-        ("compartidos", "INTEGER DEFAULT 0"),
-        ("guardados", "INTEGER DEFAULT 0"),
-        ("seguidores", "INTEGER DEFAULT 0"),
-        ("duracion", "REAL DEFAULT 0"),
-        ("retencion", "REAL DEFAULT 0"),
-        ("completado", "REAL DEFAULT 0"),
-        ("t_avg", "REAL DEFAULT 0"),
-        ("watchtime_total", "REAL DEFAULT 0")
-    ]
-
-    for nombre, tipo in metricas_nuevas:
-        if nombre not in cols:
-            print(f"🛠️ Agregando métrica: {nombre}")
-            cur.execute(f"ALTER TABLE licenses ADD COLUMN {nombre} {tipo}")
-
-    conn.commit()
-    conn.close()
-    print("✅ Base de datos verificada y actualizada correctamente.")
 
 
 @app.route("/api/update_metrics", methods=["POST"])
@@ -2371,6 +2373,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
