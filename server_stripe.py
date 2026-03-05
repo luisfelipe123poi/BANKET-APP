@@ -2183,6 +2183,24 @@ def vincular_video():
     return jsonify({"ok": True})
 
 
+@app.route("/api/get_metrics/<license_key>", methods=["GET"])
+def get_video_metrics(license_key):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row # Para obtener resultados como diccionario
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT views, likes, comentarios, compartidos, guardados, 
+               retencion, completado, t_avg, watchtime_total 
+        FROM licenses WHERE license_key = ?
+    """, (license_key,))
+    
+    row = cur.fetchone()
+    conn.close()
+    
+    if row:
+        return jsonify(dict(row))
+    return jsonify({"error": "No data"}), 404
 
 
 @app.route("/cancel")
@@ -2302,6 +2320,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
