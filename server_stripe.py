@@ -44,7 +44,11 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
 # 1. Creamos la app con todas las configuraciones (nombre y carpeta de templates)
+# Manten tu línea actual intacta:
 app = Flask(__name__, template_folder="templates")
+
+# AGREGA ESTO JUSTO DEBAJO:
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # 2. Aplicamos CORS a esa instancia de la app
 CORS(app, resources={r"/*": {
@@ -2276,6 +2280,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
