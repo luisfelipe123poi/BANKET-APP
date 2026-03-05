@@ -2183,27 +2183,32 @@ def vincular_video():
     return jsonify({"ok": True})
 
 
-@app.route("/api/get_all_metrics", methods=["POST"])
-def get_all_metrics():
-    data = request.json
-    ids = data.get("ids", [])
-    if not ids:
-        return jsonify({})
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    
-    # Buscamos todos los videos de la lista de una sola vez
-    placeholders = ', '.join(['?'] * len(ids))
-    query = f"SELECT license_key, views, likes, retencion FROM licenses WHERE license_key IN ({placeholders})"
-    
-    cur.execute(query, ids)
-    rows = cur.fetchall()
-    conn.close()
-    
-    # Convertimos a un diccionario para que la extensión lo lea fácil
-    return jsonify({row["license_key"]: dict(row) for row in rows})
+@app.route("/api/get_metrics/<license_key>", methods=["GET"])
+def get_video_metrics(license_key):
+    """
+    Endpoint para obtener las métricas de un video específico.
+    Se usa para rellenar los campos en blanco del editModal automáticamente.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        # Buscamos los datos actuales en la base de datos
+        cur.execute("SELECT views, likes, retencion FROM licenses WHERE license_key = ?", (license_key,))
+        row = cur.fetchone()
+        conn.close()
+        
+        if row:
+            # Convertimos a diccionario (p.ej. {"views": 1500, "likes": 200, "retencion": 45})
+            return jsonify(dict(row))
+        
+        # Si no existe, devolvemos valores en 0 para no romper el modal
+        return jsonify({"views": 0, "likes": 0, "retencion": 0})
+        
+    except Exception as e:
+        print(f"❌ Error en get_metrics: {str(e)}")
+        return jsonify({"error": "Error interno del servidor", "views": 0, "likes": 0, "retencion": 0}), 500
 
 
 @app.route("/cancel")
@@ -2323,6 +2328,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
