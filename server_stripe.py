@@ -371,6 +371,7 @@ def save_license(
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
+    ensure_db_schema()
 
     # -----------------------------
     # Tabla principal de licencias
@@ -2370,6 +2371,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
