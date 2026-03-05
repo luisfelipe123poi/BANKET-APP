@@ -922,27 +922,62 @@ def test_inject(license_key):
         return f"<h1 style='color:red;'>❌ Error SQL</h1><p>{str(e)}</p>"   
 
 # =============================================================
-# 🔍 RUTA PARA LEER DATOS DESDE EL MODAL (LA QUE TE FALTA)
+# 🔍 RUTA PARA LEER DATOS DESDE EL MODAL (ACTUALIZADA)
 # =============================================================
 @app.route("/api/license/info", methods=["GET"])
 def get_license_info_dashboard():
-    # El JS envía: /api/license/info?key=1772310264892
-    key = request.args.get("key")
-    if not key:
-        return jsonify({"ok": False, "error": "Falta la clave"}), 400
+    # El JS ahora envía: /api/license/info?key=1772310264892&email=usuario@correo.com
+    video_id = request.args.get("key")
+    user_email = request.args.get("email")
+
+    if not video_id:
+        return jsonify({"ok": False, "error": "Falta el ID del video"}), 400
     
-    # Buscamos en la base de datos
-    lic = get_license_by_key(key)
+    if not user_email:
+        return jsonify({"ok": False, "error": "Sesión no identificada (falta email)"}), 400
     
-    if not lic:
-        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
-    
-    # Importante: Enviamos el objeto 'lic' que ya contiene views, likes y retencion
-    return jsonify({
-        "ok": True,
-        "license": lic
-    })
+    try:
+        conn = get_db_connection()
+        # Usamos row_factory para obtener un diccionario directamente
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
         
+        # BUSQUEDA SEGURA: Filtramos por el ID del video Y el correo del dueño
+        # Nota: En tu tabla 'licenses', 'license_key' guarda el ID del video (ej. 1772310264892)
+        cur.execute("""
+            SELECT * FROM licenses 
+            WHERE email = ? AND license_key = ?
+        """, (user_email, video_id))
+        
+        row = cur.fetchone()
+        conn.close()
+        
+        if not row:
+            # Si no existe, devolvemos un 404 pero con mensaje claro
+            return jsonify({
+                "ok": False, 
+                "error": f"No se encontraron datos para el video {video_id} bajo el correo {user_email}"
+            }), 404
+        
+        # Convertimos la fila de la DB a un diccionario de Python
+        lic_data = dict(row)
+        
+        # Aseguramos que los valores numéricos existan para que el Modal no muestre 'undefined'
+        return jsonify({
+            "ok": True,
+            "license": {
+                "license_key": lic_data.get("license_key"),
+                "views": lic_data.get("views", 0),
+                "likes": lic_data.get("likes", 0),
+                "retencion": lic_data.get("retencion", 0),
+                "status": lic_data.get("status", "active"),
+                "plan": lic_data.get("plan", "starter")
+            }
+        })
+
+    except Exception as e:
+        print(f"❌ Error en get_license_info_dashboard: {str(e)}")
+        return jsonify({"ok": False, "error": "Error interno del servidor"}), 500
 
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
@@ -2388,6 +2423,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
