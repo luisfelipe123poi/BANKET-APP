@@ -43,19 +43,11 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# 1. Creamos la app con todas las configuraciones (nombre y carpeta de templates)
-# Manten tu línea actual intacta:
 app = Flask(__name__, template_folder="templates")
 
-# AGREGA ESTO JUSTO DEBAJO:
-CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-# 2. Aplicamos CORS a esa instancia de la app
-CORS(app, resources={r"/*": {
-    "origins": ["https://metriclips.com", "http://127.0.0.1:5500"], # Añadí localhost por si testeas local
-    "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization"]
-}})
+# CONFIGURACIÓN MAESTRA DE CORS (Una sola llamada)
+# Esto permite que cualquier origen acceda a tus rutas /api/
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -928,6 +920,29 @@ def test_inject(license_key):
         """
     except Exception as e:
         return f"<h1 style='color:red;'>❌ Error SQL</h1><p>{str(e)}</p>"   
+
+# =============================================================
+# 🔍 RUTA PARA LEER DATOS DESDE EL MODAL (LA QUE TE FALTA)
+# =============================================================
+@app.route("/api/license/info", methods=["GET"])
+def get_license_info_dashboard():
+    # El JS envía: /api/license/info?key=1772310264892
+    key = request.args.get("key")
+    if not key:
+        return jsonify({"ok": False, "error": "Falta la clave"}), 400
+    
+    # Buscamos en la base de datos
+    lic = get_license_by_key(key)
+    
+    if not lic:
+        return jsonify({"ok": False, "error": "Licencia no encontrada"}), 404
+    
+    # Importante: Enviamos el objeto 'lic' que ya contiene views, likes y retencion
+    return jsonify({
+        "ok": True,
+        "license": lic
+    })
+        
 
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
@@ -2373,6 +2388,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
