@@ -885,32 +885,46 @@ def mp_failure():
 
 
 # =============================================================
-# 🛠️ RUTA SOLO PARA PRUEBAS (SIMULADOR DE BOT)
+# 🛠️ RUTA PARA PRUEBAS (CORREGIDA PARA TU DB)
 # =============================================================
 @app.route("/api/test_inject/<license_key>")
 def test_inject(license_key):
-    # Valores de prueba fijos o por parámetros URL
-    vistas = request.args.get('v', 12500)
-    likes = request.args.get('l', 850)
-    ret = request.args.get('r', 65)
+    # Recibimos valores de la URL: ?v=100&l=20&r=50
+    # Si no pones nada, usará los valores por defecto (12500, 850, 65)
+    v = request.args.get('v', 12500)
+    l = request.args.get('l', 850)
+    r = request.args.get('r', 65)
 
     try:
-        conn = sqlite3.connect(DB_PATH)
+        # Usamos tu función de conexión existente
+        conn = get_db_connection()
         cur = conn.cursor()
         
-        # Actualizamos la licencia con datos de prueba
+        # ACTUALIZACIÓN: Usamos 'views', 'likes' y 'retencion' (nombres reales en tu tabla)
         cur.execute("""
             UPDATE licenses 
             SET views = ?, likes = ?, retencion = ? 
             WHERE license_key = ?
-        """, (vistas, likes, ret, license_key))
+        """, (v, l, r, license_key))
         
         conn.commit()
         conn.close()
         
-        return f"✅ Datos inyectados en {license_key}: {vistas} vistas, {likes} likes, {ret}% retención. <br> Ahora ya puedes probar tu extensión."
+        return f"""
+        <html>
+            <body style="font-family:sans-serif; text-align:center; padding-top:50px;">
+                <h1 style="color: #00ffaa;">✅ Inyección Exitosa</h1>
+                <p><b>Licencia:</b> {license_key}</p>
+                <p><b>Views (v):</b> {v}</p>
+                <p><b>Likes (l):</b> {l}</p>
+                <p><b>Retención (r):</b> {r}%</p>
+                <hr style="width:200px;">
+                <p>Ahora ve a tu extensión y haz clic en la tarjeta del video #{license_key}</p>
+            </body>
+        </html>
+        """
     except Exception as e:
-        return f"❌ Error: {str(e)}"    
+        return f"<h1 style='color:red;'>❌ Error SQL</h1><p>{str(e)}</p>"   
 
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
@@ -2356,6 +2370,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
