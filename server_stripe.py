@@ -430,9 +430,11 @@ def ensure_db_schema():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
+    # Obtener columnas actuales para no duplicar
     cur.execute("PRAGMA table_info(licenses)")
     cols = [c[1] for c in cur.fetchall()]
 
+    # --- TUS LOGICAS ORIGINALES (NO TOCAR) ---
     if "credits_left" not in cols:
         print("🛠️ Agregando columna credits_left")
         cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
@@ -441,9 +443,69 @@ def ensure_db_schema():
         print("🛠️ Agregando columna expires_at")
         cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
 
+    # --- NUEVAS MÉTRICAS TIKTOK (AGREGADAS SIN ELIMINAR NADA) ---
+    
+    # 1. Columna de vinculación (El puente con TikTok)
+    if "tiktok_id" not in cols:
+        print("🛠️ Agregando columna tiktok_id")
+        cur.execute("ALTER TABLE licenses ADD COLUMN tiktok_id TEXT")
+
+    # 2. Métricas de interacción y rendimiento
+    metricas_nuevas = [
+        ("views", "INTEGER DEFAULT 0"),
+        ("likes", "INTEGER DEFAULT 0"),
+        ("comentarios", "INTEGER DEFAULT 0"),
+        ("compartidos", "INTEGER DEFAULT 0"),
+        ("guardados", "INTEGER DEFAULT 0"),
+        ("seguidores", "INTEGER DEFAULT 0"),
+        ("duracion", "REAL DEFAULT 0"),
+        ("retencion", "REAL DEFAULT 0"),
+        ("completado", "REAL DEFAULT 0"),
+        ("t_avg", "REAL DEFAULT 0"),
+        ("watchtime_total", "REAL DEFAULT 0")
+    ]
+
+    for nombre, tipo in metricas_nuevas:
+        if nombre not in cols:
+            print(f"🛠️ Agregando métrica: {nombre}")
+            cur.execute(f"ALTER TABLE licenses ADD COLUMN {nombre} {tipo}")
+
     conn.commit()
     conn.close()
+    print("✅ Base de datos verificada y actualizada correctamente.")
 
+
+@app.route("/api/update_metrics", methods=["POST"])
+def update_metrics():
+    data = request.json
+    tiktok_id = data.get('tiktok_id')
+    
+    if not tiktok_id:
+        return jsonify({"ok": False, "error": "No TikTok ID"}), 400
+
+    # Construimos la consulta dinámicamente según lo que mande la extensión
+    campos = []
+    valores = []
+    for clave, valor in data.items():
+        if clave != 'tiktok_id':
+            campos.append(f"{clave} = ?")
+            valores.append(valor)
+    
+    if not campos:
+        return jsonify({"ok": True, "message": "Nada que actualizar"})
+
+    valores.append(tiktok_id)
+    query = f"UPDATE licenses SET {', '.join(campos)} WHERE tiktok_id = ?"
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(query, valores)
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"ok": True})
+
+    
 
 
 # -------------------------
@@ -2214,6 +2276,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
