@@ -2162,6 +2162,57 @@ def app_version():
         ]
     })
 
+# ==========================================================
+# ENDPOINTS PARA EXTENSIÓN (METRICLIPS)
+# ==========================================================
+
+@app.route("/api/vincular_video", methods=["POST"])
+def vincular_video():
+    data = request.json
+    license_key = data.get("license_key")
+    tiktok_id = data.get("tiktok_id")
+
+    if not license_key or not tiktok_id:
+        return jsonify({"ok": False, "error": "Faltan datos"}), 400
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("UPDATE licenses SET tiktok_id = ? WHERE license_key = ?", (tiktok_id, license_key))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/update_metrics", methods=["POST"])
+def update_metrics():
+    data = request.json
+    tiktok_id = data.get('tiktok_id')
+    
+    if not tiktok_id:
+        return jsonify({"ok": False, "error": "Falta tiktok_id"}), 400
+
+    # Construcción dinámica: solo actualiza lo que viene en 'data'
+    campos = []
+    valores = []
+    for clave, valor in data.items():
+        if clave != 'tiktok_id':
+            campos.append(f"{clave} = ?")
+            valores.append(valor)
+    
+    if not campos:
+        return jsonify({"ok": True})
+
+    valores.append(tiktok_id)
+    query = f"UPDATE licenses SET {', '.join(campos)} WHERE tiktok_id = ?"
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(query, valores)
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"ok": True})
+    
+
 
 @app.route("/cancel")
 def cancel():
@@ -2280,6 +2331,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
