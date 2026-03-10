@@ -2051,6 +2051,44 @@ def create_free_license():
         "license": new_license
     })
 
+@app.route('/generar_guiones_ia', methods=['POST'])
+def generar_guiones_ia():
+    data = request.json
+    email = data.get('email')
+    nicho = data.get('nicho')
+    avatar = data.get('avatar')
+    edad = data.get('edad')
+    cantidad = data.get('cantidad', 10)
+
+    if not email or not nicho:
+        return jsonify({"ok": False, "error": "Datos incompletos"}), 400
+
+    # AQUÍ SE CONECTARÍA CON TU API DE LLAMA 3 / OPENAI
+    # Por ahora, simulamos la creación de guiones para la cola
+    guiones_generados = []
+    for i in range(int(cantidad)):
+        guiones_generados.append({
+            "tipo": f"Video {i+1} - {nicho}",
+            "estado_bot": "listo",
+            "hora": datetime.now().strftime("%H:%M"),
+            "prompt_usado": f"Target: {avatar}, Edad: {edad}"
+        })
+
+    # Guardar en SQLite para que TurboClips lo vea
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for g in guiones_generados:
+            cursor.execute('''
+                INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (email, g['tipo'], g['estado_bot'], g['hora'], json.dumps(g)))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "message": "Guiones sincronizados con la cola"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})    
+
 @app.route("/buy-credits", methods=["GET"])
 def buy_credits():
     pack = request.args.get("pack")
@@ -2392,6 +2430,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
