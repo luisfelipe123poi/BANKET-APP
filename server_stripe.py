@@ -1359,25 +1359,49 @@ def metric_generation_success():
 
     return jsonify({"ok": True})
     
+from flask_cors import CORS # Asegúrate de tener instalado: pip install flask-cors
+
+# Configura CORS para permitir tu dominio
+CORS(app) 
+
 @app.route('/api/guardar_guiones_app', methods=['POST'])
 def guardar_guiones_app():
-    data = request.json
-    email = data.get('email')
-    guiones = data.get('guiones') # Esto es el array de 10 guiones que envió la Web
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"ok": False, "message": "No se recibieron datos"}), 400
+            
+        email = data.get('email')
+        guiones = data.get('guiones')
 
-    conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
-    cursor = conn.cursor()
-    
-    # Los insertamos en la cola para que la App los lea
-    for texto in guiones:
-        cursor.execute('''
-            INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (email, "Guion IA", "pendiente", datetime.now().strftime("%H:%M"), texto))
-    
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True})
+        if not email or not guiones:
+            return jsonify({"ok": False, "message": "Faltan datos obligatorios"}), 400
+
+        conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'), timeout=20)
+        cursor = conn.cursor()
+        
+        # Insertamos los 10 guiones
+        for texto in guiones:
+            # Extraemos la hora de la metadata si existe, sino usamos la actual
+            # Formato esperado: [META: B:1 | T:A | H:06:00]
+            hora_envio = datetime.now().strftime("%H:%M")
+            if "[META:" in texto and "H:" in texto:
+                try:
+                    hora_envio = texto.split("H:")[1].split("]")[0].trim()
+                except:
+                    pass
+
+            cursor.execute('''
+                INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (email, "Guion IA", "pendiente", hora_envio, texto))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "message": "Guiones guardados correctamente"}), 200
+    except Exception as e:
+        print(f"Error en servidor: {e}")
+        return jsonify({"ok": False, "message": str(e)}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
@@ -2449,6 +2473,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
