@@ -1358,7 +1358,26 @@ def metric_generation_success():
     conn.close()
 
     return jsonify({"ok": True})
+    
+@app.route('/api/guardar_guiones_app', methods=['POST'])
+def guardar_guiones_app():
+    data = request.json
+    email = data.get('email')
+    guiones = data.get('guiones') # Esto es el array de 10 guiones que envió la Web
 
+    conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
+    cursor = conn.cursor()
+    
+    # Los insertamos en la cola para que la App los lea
+    for texto in guiones:
+        cursor.execute('''
+            INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (email, "Guion IA", "pendiente", datetime.now().strftime("%H:%M"), texto))
+    
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
@@ -2430,6 +2449,7 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
 
 
 
