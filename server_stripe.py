@@ -1361,7 +1361,7 @@ def metric_generation_success():
     
 @app.route('/api/guardar_guiones_app', methods=['POST', 'OPTIONS'])
 def guardar_guiones_app():
-    # ESTO DESBLOQUEA EL FILTRO:
+    # 1. Esto responde al navegador que el servidor es seguro y permite la conexión
     if request.method == 'OPTIONS':
         return jsonify({"ok": True}), 200
 
@@ -1370,21 +1370,29 @@ def guardar_guiones_app():
         email = data.get('email')
         guiones = data.get('guiones')
 
-        # Tu lógica de guardado en la DB de Render (/var/data)
+        if not email or not guiones:
+            return jsonify({"ok": False, "message": "Faltan datos (email o guiones)"}), 400
+
+        # 2. Conexión a la base de datos en la ruta de Render (/var/data)
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
+        
+        ahora = datetime.now().strftime("%H:%M")
         
         for texto in guiones:
             cursor.execute('''
                 INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (email, "Guion IA", "pendiente", datetime.now().strftime("%H:%M"), texto))
+            ''', (email, "Guion IA", "pendiente", ahora, texto))
         
         conn.commit()
         conn.close()
+        
         return jsonify({"ok": True}), 200
+        
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        print(f"Error en servidor: {e}")
+        return jsonify({"ok": False, "message": str(e)}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
