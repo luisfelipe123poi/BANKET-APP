@@ -1423,16 +1423,17 @@ def guardar_guiones_app():
 def obtener_guiones_pendientes():
     data = request.json
     email = data.get('email')
-    marcar_leido = data.get('marcar_leido', False) # Si es True, los pondremos como 'sincronizado'
+    # Si la app pide 'marcar_leido', los pasamos a 'sincronizado' para que no vuelvan a aparecer
+    marcar_leido = data.get('marcar_leido', False)
 
     if not email:
-        return jsonify({"ok": False}), 400
+        return jsonify({"ok": False, "message": "Email requerido"}), 400
 
     try:
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        # Buscar guiones pendientes
+        # 1. Buscar guiones con estado 'pendiente'
         cursor.execute('''
             SELECT id, metadata FROM videos_cola 
             WHERE email = ? AND estado_bot = 'pendiente'
@@ -1442,18 +1443,25 @@ def obtener_guiones_pendientes():
         guiones = [row[1] for row in rows]
         ids = [row[0] for row in rows]
 
-        # Si la app pide marcarlos como leídos para que no salte más el Toast
+        # 2. Si se solicita, marcarlos como leídos
         if marcar_leido and ids:
+            # Creamos los placeholders (?,?,?) según la cantidad de IDs
+            placeholders = ','.join(['?'] * len(ids))
             cursor.execute(f'''
                 UPDATE videos_cola SET estado_bot = 'sincronizado' 
-                WHERE id IN ({",".join(["?"]*len(ids))})
+                WHERE id IN ({placeholders})
             ''', ids)
             conn.commit()
 
         conn.close()
-        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
+        return jsonify({
+            "ok": True, 
+            "guiones": guiones, 
+            "count": len(guiones)
+        })
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500        
+        print(f"Error en obtener_guiones: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500       
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
