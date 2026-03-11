@@ -1423,61 +1423,29 @@ def guardar_guiones_app():
 def obtener_guiones_pendientes():
     data = request.json
     email = data.get('email')
-    # Si la app pide 'marcar_leido', los pasamos a 'sincronizado' para que no vuelvan a aparecer
     marcar_leido = data.get('marcar_leido', False)
 
     if not email:
-        return jsonify({"ok": False, "message": "Email requerido"}), 400
+        return jsonify({"ok": False}), 400
 
     try:
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        # 1. Buscar guiones con estado 'pendiente' incluyendo tipo y hora para la meta
-        # Usamos metadata (que contiene el texto del guion), tipo y hora
-        cursor.execute('''
-            SELECT id, metadata, tipo, hora 
-            FROM videos_cola 
-            WHERE email = ? AND estado_bot = 'pendiente'
-        ''', (email,))
+        cursor.execute('SELECT id, metadata FROM videos_cola WHERE email = ? AND estado_bot = "pendiente"', (email,))
         rows = cursor.fetchall()
         
-        guiones_formateados = []
-        ids = []
+        guiones = [row[1] for row in rows]
+        ids = [row[0] for row in rows]
 
-        for row in rows:
-            db_id, texto_guion, tipo, hora = row
-            
-            # Construimos la etiqueta exactamente como la solicita TurboClips
-            # Ejemplo: [META: B:5 | T:A | H:21:30]
-            meta_header = f"[META: B:{db_id} | T:{tipo} | H:{hora}]"
-            
-            # Unimos la metadata con el texto del guion (salto de línea entre ellos)
-            bloque_completo = f"{meta_header}\n{texto_guion}"
-            
-            guiones_formateados.append(bloque_completo)
-            ids.append(db_id)
-
-        # 2. Si se solicita, marcarlos como leídos (sincronizados)
         if marcar_leido and ids:
             placeholders = ','.join(['?'] * len(ids))
-            cursor.execute(f'''
-                UPDATE videos_cola SET estado_bot = 'sincronizado' 
-                WHERE id IN ({placeholders})
-            ''', ids)
+            cursor.execute(f'UPDATE videos_cola SET estado_bot = "sincronizado" WHERE id IN ({placeholders})', ids)
             conn.commit()
 
         conn.close()
-        
-        # Devolvemos los guiones ya formateados con su metadata arriba
-        return jsonify({
-            "ok": True, 
-            "guiones": guiones_formateados, 
-            "count": len(guiones_formateados)
-        })
-        
+        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
     except Exception as e:
-        print(f"Error en obtener_guiones: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
