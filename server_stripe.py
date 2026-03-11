@@ -1419,6 +1419,42 @@ def guardar_guiones_app():
         print(f"❌ Error crítico en servidor: {e}")
         return jsonify({"ok": False, "message": f"Error en base de datos: {str(e)}"}), 500
 
+@app.route('/api/obtener_guiones_pendientes', methods=['POST'])
+def obtener_guiones_pendientes():
+    data = request.json
+    email = data.get('email')
+    marcar_leido = data.get('marcar_leido', False) # Si es True, los pondremos como 'sincronizado'
+
+    if not email:
+        return jsonify({"ok": False}), 400
+
+    try:
+        conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
+        cursor = conn.cursor()
+        
+        # Buscar guiones pendientes
+        cursor.execute('''
+            SELECT id, metadata FROM videos_cola 
+            WHERE email = ? AND estado_bot = 'pendiente'
+        ''', (email,))
+        rows = cursor.fetchall()
+        
+        guiones = [row[1] for row in rows]
+        ids = [row[0] for row in rows]
+
+        # Si la app pide marcarlos como leídos para que no salte más el Toast
+        if marcar_leido and ids:
+            cursor.execute(f'''
+                UPDATE videos_cola SET estado_bot = 'sincronizado' 
+                WHERE id IN ({",".join(["?"]*len(ids))})
+            ''', ids)
+            conn.commit()
+
+        conn.close()
+        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500        
+
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
     data = request.get_json() or {}
