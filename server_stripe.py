@@ -1426,53 +1426,95 @@ def obtener_guiones_pendientes():
     marcar_leido = data.get('marcar_leido', False)
 
     if not email:
-        return jsonify({"ok": False, "message": "Email requerido"}), 400
+        return jsonify({"ok": False}), 400
 
     try:
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        # Consultamos los datos reales asignados a cada guion
-        cursor.execute('''
-            SELECT id, metadata, tipo, hora 
-            FROM videos_cola 
-            WHERE email = ? AND estado_bot = 'pendiente'
-        ''', (email,))
+        cursor.execute('SELECT id, metadata FROM videos_cola WHERE email = ? AND estado_bot = "pendiente"', (email,))
         rows = cursor.fetchall()
         
-        guiones_formateados = []
-        ids_procesados = []
+        guiones = [row[1] for row in rows]
+        ids = [row[0] for row in rows]
 
-        for row in rows:
-            db_id, texto_guion, tipo_real, hora_real = row
-            
-            # Formato exacto: [META: B:ID_REAL | T:TIPO_REAL | H:HORA_REAL]
-            # No inventamos nada, usamos lo que viene de la fila de la DB
-            meta_header = f"[META: B:{db_id} | T:{tipo_real} | H:{hora_real}]"
-            
-            # El bloque final lleva su meta real arriba y el guion abajo
-            bloque_completo = f"{meta_header}\n{texto_guion}"
-            
-            guiones_formateados.append(bloque_completo)
-            ids_procesados.append(db_id)
-
-        if marcar_leido and ids_procesados:
-            placeholders = ','.join(['?'] * len(ids_procesados))
-            cursor.execute(f'''
-                UPDATE videos_cola SET estado_bot = 'sincronizado' 
-                WHERE id IN ({placeholders})
-            ''', ids_procesados)
+        if marcar_leido and ids:
+            placeholders = ','.join(['?'] * len(ids))
+            cursor.execute(f'UPDATE videos_cola SET estado_bot = "sincronizado" WHERE id IN ({placeholders})', ids)
             conn.commit()
 
         conn.close()
-        return jsonify({
-            "ok": True, 
-            "guiones": guiones_formateados, 
-            "count": len(guiones_formateados)
-        })
-        
+        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
     except Exception as e:
-        print(f"Error en servidor: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/metrics/generation-error", methods=["POST"])
+def metric_generation_error():
+    data = request.get_json() or {}
+    email = data.get("email")
+    error = data.get("error")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO metrics (email, event, error) VALUES (?, ?, ?)",
+        (email, "error", error)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
+# -------------------------
+# Endpoints
+# -------------------------
+
+from flask import redirect
+
+@app.route("/create-checkout-session", methods=["GET", "POST"])
+def create_checkout_session():
+    price_id = None
+    email = None
+    plan = "pro"
+
+    if request.method == "GET":
+        price_id = request.args.get("price_id")
+        email = request.args.get("email")
+        plan = request.args.get("plan", "pro")
+
+    elif request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        price_id = data.get("price_id")
+        email = data.get("email")
+        plan = data.get("plan", "pro")
+
+    if not price_id:
+        price_id = PRICE_ID_PRO
+
+    if not email:
+        return jsonify({"ok": False, "error": "Se requiere email."}), 400
+
+    try:
+        customers = stripe.Customer.list(email=email, limit=1)
+        if customers and customers.data:
+            customer = customers.data[0]
+        else:
+            customer = stripe.Customer.create(email=email)
+
+        session = stripe.checkout.Session.create(
+            success_url=urljoin(PUBLIC_DOMAIN, "/success?session_id={CHECKOUT_SESSION_ID}"),
+            cancel_url=urljoin(PUBLIC_DOMAIN, "/cancel"),
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            customer=customer.id,
+            metadata={"email": email, "plan": plan}
+        )
+
+        #  🔥 CORRECTO → devolver JSON con la URL
+        return jsonify({"ok": True, "url": session.url})
+
+    except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
