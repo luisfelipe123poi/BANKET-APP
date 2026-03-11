@@ -1426,25 +1426,56 @@ def obtener_guiones_pendientes():
     marcar_leido = data.get('marcar_leido', False)
 
     if not email:
-        return jsonify({"ok": False}), 400
+        return jsonify({"ok": False, "message": "Email requerido"}), 400
 
     try:
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        cursor.execute('SELECT id, metadata FROM videos_cola WHERE email = ? AND estado_bot = "pendiente"', (email,))
+        # Consultamos los datos de la tabla
+        cursor.execute('''
+            SELECT id, metadata, tipo, hora 
+            FROM videos_cola 
+            WHERE email = ? AND estado_bot = 'pendiente'
+        ''', (email,))
         rows = cursor.fetchall()
         
-        guiones = [row[1] for row in rows]
-        ids = [row[0] for row in rows]
+        guiones_formateados = []
+        ids_reales_db = []
 
-        if marcar_leido and ids:
-            placeholders = ','.join(['?'] * len(ids))
-            cursor.execute(f'UPDATE videos_cola SET estado_bot = "sincronizado" WHERE id IN ({placeholders})', ids)
+        for row in rows:
+            db_id, texto_guion, tipo_db, hora_real = row
+            
+            # --- CORRECCIÓN DE FORMATO ---
+            # Si el tipo viene como "Guion IA", "Tipo A", etc., extraemos solo la letra.
+            # Si no se encuentra letra, por defecto usamos 'A'.
+            tipo_letra = "A"
+            if "B" in str(tipo_db).upper(): tipo_letra = "B"
+            elif "C" in str(tipo_db).upper(): tipo_letra = "C"
+            
+            # Para el ID de bloque (B:), si prefieres que sea un número corto 
+            # correlativo o el ID de la fila simplificado:
+            bloque_id = db_id 
+
+            # Formato exacto solicitado
+            meta_header = f"[META: B:{bloque_id} | T:{tipo_letra} | H:{hora_real}]"
+            
+            # Unimos meta con el guion
+            guiones_formateados.append(f"{meta_header}\n{texto_guion}")
+            ids_reales_db.append(db_id)
+
+        if marcar_leido and ids_reales_db:
+            placeholders = ','.join(['?'] * len(ids_reales_db))
+            cursor.execute(f'UPDATE videos_cola SET estado_bot = "sincronizado" WHERE id IN ({placeholders})', ids_reales_db)
             conn.commit()
 
         conn.close()
-        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
+        return jsonify({
+            "ok": True, 
+            "guiones": guiones_formateados, 
+            "count": len(guiones_formateados)
+        })
+        
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
