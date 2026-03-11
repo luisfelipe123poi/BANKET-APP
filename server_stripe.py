@@ -1360,6 +1360,7 @@ def metric_generation_success():
     return jsonify({"ok": True})
     
 @app.route('/api/guardar_guiones_app', methods=['POST', 'OPTIONS'])
+@app.route('/api/guardar_guiones_app/', methods=['POST', 'OPTIONS'])
 def guardar_guiones_app():
     # 1. Esto responde al navegador que el servidor es seguro y permite la conexión
     if request.method == 'OPTIONS':
