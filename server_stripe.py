@@ -1433,19 +1433,33 @@ def obtener_guiones_pendientes():
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        # 1. Buscar guiones con estado 'pendiente'
+        # 1. Buscar guiones con estado 'pendiente' incluyendo tipo y hora para la meta
+        # Usamos metadata (que contiene el texto del guion), tipo y hora
         cursor.execute('''
-            SELECT id, metadata FROM videos_cola 
+            SELECT id, metadata, tipo, hora 
+            FROM videos_cola 
             WHERE email = ? AND estado_bot = 'pendiente'
         ''', (email,))
         rows = cursor.fetchall()
         
-        guiones = [row[1] for row in rows]
-        ids = [row[0] for row in rows]
+        guiones_formateados = []
+        ids = []
 
-        # 2. Si se solicita, marcarlos como leídos
+        for row in rows:
+            db_id, texto_guion, tipo, hora = row
+            
+            # Construimos la etiqueta exactamente como la solicita TurboClips
+            # Ejemplo: [META: B:5 | T:A | H:21:30]
+            meta_header = f"[META: B:{db_id} | T:{tipo} | H:{hora}]"
+            
+            # Unimos la metadata con el texto del guion (salto de línea entre ellos)
+            bloque_completo = f"{meta_header}\n{texto_guion}"
+            
+            guiones_formateados.append(bloque_completo)
+            ids.append(db_id)
+
+        # 2. Si se solicita, marcarlos como leídos (sincronizados)
         if marcar_leido and ids:
-            # Creamos los placeholders (?,?,?) según la cantidad de IDs
             placeholders = ','.join(['?'] * len(ids))
             cursor.execute(f'''
                 UPDATE videos_cola SET estado_bot = 'sincronizado' 
@@ -1454,14 +1468,17 @@ def obtener_guiones_pendientes():
             conn.commit()
 
         conn.close()
+        
+        # Devolvemos los guiones ya formateados con su metadata arriba
         return jsonify({
             "ok": True, 
-            "guiones": guiones, 
-            "count": len(guiones)
+            "guiones": guiones_formateados, 
+            "count": len(guiones_formateados)
         })
+        
     except Exception as e:
         print(f"Error en obtener_guiones: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500       
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
