@@ -1432,11 +1432,30 @@ def obtener_guiones_pendientes():
         conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
         cursor = conn.cursor()
         
-        cursor.execute('SELECT id, metadata FROM videos_cola WHERE email = ? AND estado_bot = "pendiente"', (email,))
+        # Seleccionamos el guion (metadata) y los valores para el prefijo META
+        cursor.execute('''
+            SELECT id, metadata, score_b, score_t, hora_creacion 
+            FROM videos_cola 
+            WHERE email = ? AND estado_bot = "pendiente"
+        ''', (email,))
+        
         rows = cursor.fetchall()
         
-        guiones = [row[1] for row in rows]
-        ids = [row[0] for row in rows]
+        guiones_procesados = []
+        ids = []
+
+        for row in rows:
+            id_db, contenido_guion, b_val, t_val, hora = row
+            
+            # Formatear la línea de metadatos: META: B:5 | T:C | H:21:35
+            # Usamos los valores reales de la base de datos
+            prefix = f"META: B:{b_val} | T:{t_val} | H:{hora}"
+            
+            # Unimos el prefijo con el cuerpo del guion
+            guion_completo = f"{prefix}\n{contenido_guion}"
+            
+            guiones_procesados.append(guion_completo)
+            ids.append(id_db)
 
         if marcar_leido and ids:
             placeholders = ','.join(['?'] * len(ids))
@@ -1444,7 +1463,11 @@ def obtener_guiones_pendientes():
             conn.commit()
 
         conn.close()
-        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
+        return jsonify({
+            "ok": True, 
+            "guiones": guiones_procesados, 
+            "count": len(guiones_procesados)
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -2518,3 +2541,74 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
