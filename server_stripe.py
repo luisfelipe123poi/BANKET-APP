@@ -1362,38 +1362,62 @@ def metric_generation_success():
 @app.route('/api/guardar_guiones_app', methods=['POST', 'OPTIONS'])
 @app.route('/api/guardar_guiones_app/', methods=['POST', 'OPTIONS'])
 def guardar_guiones_app():
-    # 1. Esto responde al navegador que el servidor es seguro y permite la conexión
+    # 1. Manejo de Preflight CORS (Necesario para navegadores)
     if request.method == 'OPTIONS':
         return jsonify({"ok": True}), 200
 
     try:
         data = request.json
+        if not data:
+            return jsonify({"ok": False, "message": "No se recibieron datos JSON"}), 400
+
         email = data.get('email')
         guiones = data.get('guiones')
 
         if not email or not guiones:
             return jsonify({"ok": False, "message": "Faltan datos (email o guiones)"}), 400
 
-        # 2. Conexión a la base de datos en la ruta de Render (/var/data)
-        conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
+        # 2. Conexión a la base de datos
+        db_path = os.path.join(DATA_DIR, 'database.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
+        # 3. CREAR TABLA SI NO EXISTE (Soluciona el error 'no such table')
+        # Añadimos 'created_at' para tener un registro histórico
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS videos_cola (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT,
+                tipo TEXT,
+                estado_bot TEXT,
+                hora TEXT,
+                metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         ahora = datetime.now().strftime("%H:%M")
         
-        for texto in guiones:
-            cursor.execute('''
-                INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (email, "Guion IA", "pendiente", ahora, texto))
+        # 4. Inserción de los guiones
+        # Si 'guiones' es una lista, iteramos; si es un solo string, lo envolvemos
+        lista_guiones = guiones if isinstance(guiones, list) else [guiones]
+        
+        for texto in lista_guiones:
+            if texto.strip(): # Solo guardar si no está vacío
+                cursor.execute('''
+                    INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (email, "Guion IA", "pendiente", ahora, texto))
         
         conn.commit()
         conn.close()
         
-        return jsonify({"ok": True}), 200
+        print(f"✅ Guiones guardados exitosamente para: {email}")
+        return jsonify({"ok": True, "message": "Guiones sincronizados"}), 200
         
     except Exception as e:
-        print(f"Error en servidor: {e}")
-        return jsonify({"ok": False, "message": str(e)}), 500
+        print(f"❌ Error crítico en servidor: {e}")
+        return jsonify({"ok": False, "message": f"Error en base de datos: {str(e)}"}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
