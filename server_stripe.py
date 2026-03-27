@@ -4,6 +4,7 @@
 # Requisitos: flask, stripe, python-dotenv
 # CONFIGURACIÓN: establecer STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PUBLIC_DOMAIN, PRICE_ID_* en variables de entorno.
 
+
 import os
 import json
 import uuid
