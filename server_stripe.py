@@ -4,7 +4,6 @@
 # Requisitos: flask, stripe, python-dotenv
 # CONFIGURACIÓN: establecer STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PUBLIC_DOMAIN, PRICE_ID_* en variables de entorno.
 
-
 import os
 import json
 import uuid
@@ -1420,41 +1419,6 @@ def guardar_guiones_app():
         print(f"❌ Error crítico en servidor: {e}")
         return jsonify({"ok": False, "message": f"Error en base de datos: {str(e)}"}), 500
 
-@app.route("/api/validate-ia-usage", methods=["POST"])
-def validate_ia_usage():
-    data = request.json
-    email = data.get("email")
-    
-    if not email:
-        return jsonify({"ok": False, "message": "Email requerido"}), 400
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    # 1. Contar cuántas veces ha generado hoy
-    cur.execute("""
-        SELECT COUNT(*) as total FROM metrics 
-        WHERE email = ? AND event = 'ia_gen' 
-        AND DATE(created_at) = DATE('now', 'localtime')
-    """, (email,))
-    
-    count = cur.fetchone()["total"]
-
-    # 2. PROBAR CON LÍMITE DE 1
-    if count >= 1:
-        conn.close()
-        return jsonify({
-            "ok": False, 
-            "message": "🚫 Límite de prueba alcanzado (1/1). Vuelve mañana."
-        }), 429
-
-    # 3. Registrar el uso
-    cur.execute("INSERT INTO metrics (email, event) VALUES (?, 'ia_gen')", (email,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"ok": True, "count": count + 1})
-
 @app.route('/api/obtener_guiones_pendientes', methods=['POST'])
 def obtener_guiones_pendientes():
     data = request.json
@@ -2435,6 +2399,49 @@ def get_video_metrics(license_key):
     except Exception as e:
         print(f"❌ Error en get_metrics: {str(e)}")
         return jsonify({"error": "Error interno del servidor", "views": 0, "likes": 0, "retencion": 0}), 500
+
+@app.route("/api/validate-ia-usage", methods=["POST", "OPTIONS"])
+def validate_ia_usage():
+    # Manejo automático de preflight CORS
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True}), 200
+
+    data = request.json
+    email = data.get("email")
+    
+    if not email:
+        return jsonify({"ok": False, "message": "Email requerido para validar uso"}), 400
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # 1. Contar usos de hoy (Límite de 1 para tu prueba)
+        cur.execute("""
+            SELECT COUNT(*) as total FROM metrics 
+            WHERE email = ? AND event = 'ia_gen' 
+            AND DATE(created_at) = DATE('now', 'localtime')
+        """, (email,))
+        
+        count = cur.fetchone()["total"]
+
+        if count >= 1: # Cambia a 5 después de probar
+            conn.close()
+            return jsonify({
+                "ok": False, 
+                "message": f"🚫 Límite de prueba alcanzado ({count}/1). Vuelve mañana."
+            }), 429
+
+        # 2. Registrar el uso
+        cur.execute("INSERT INTO metrics (email, event) VALUES (?, 'ia_gen')", (email,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"ok": True, "count": count + 1})
+    
+    except Exception as e:
+        print(f"❌ Error en server: {str(e)}")
+        return jsonify({"ok": False, "message": "Error interno del servidor"}), 500
 
 
 @app.route("/cancel")
