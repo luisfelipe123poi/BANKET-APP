@@ -1419,6 +1419,41 @@ def guardar_guiones_app():
         print(f"❌ Error crítico en servidor: {e}")
         return jsonify({"ok": False, "message": f"Error en base de datos: {str(e)}"}), 500
 
+@app.route("/api/validate-ia-usage", methods=["POST"])
+def validate_ia_usage():
+    data = request.json
+    email = data.get("email")
+    
+    if not email:
+        return jsonify({"ok": False, "message": "Email requerido"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # 1. Contar cuántas veces ha generado hoy
+    cur.execute("""
+        SELECT COUNT(*) as total FROM metrics 
+        WHERE email = ? AND event = 'ia_gen' 
+        AND DATE(created_at) = DATE('now', 'localtime')
+    """, (email,))
+    
+    count = cur.fetchone()["total"]
+
+    # 2. PROBAR CON LÍMITE DE 1
+    if count >= 1:
+        conn.close()
+        return jsonify({
+            "ok": False, 
+            "message": "🚫 Límite de prueba alcanzado (1/1). Vuelve mañana."
+        }), 429
+
+    # 3. Registrar el uso
+    cur.execute("INSERT INTO metrics (email, event) VALUES (?, 'ia_gen')", (email,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True, "count": count + 1})
+
 @app.route('/api/obtener_guiones_pendientes', methods=['POST'])
 def obtener_guiones_pendientes():
     data = request.json
