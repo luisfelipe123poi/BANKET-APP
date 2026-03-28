@@ -2425,7 +2425,7 @@ def validate_ia_usage():
         
         count = cur.fetchone()["total"]
 
-        if count >= 20: # Cambia a 5 después de probar
+        if count >= 1000: # Cambia a 5 después de probar
             conn.close()
             return jsonify({
                 "ok": False, 
