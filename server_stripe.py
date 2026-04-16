@@ -2582,73 +2582,48 @@ def cancel():
         "credits": credits_total
     })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # ==============================================================
+# ENDPOINT PARA LA EXTENSIÓN: OBTENER VIDEOS POR EMAIL
+# ==============================================================
+@app.route('/api/get-videos', methods=['GET'])
+def get_videos_by_email():
+    email = request.args.get('email')
+    
+    if not email:
+        return jsonify({"ok": False, "error": "email_required"}), 400
+
+    email = email.lower().strip()
+
+    try:
+        # Conexión a tu base de datos (asegúrate de que la ruta sea correcta)
+        conn = sqlite3.connect(DB_PATH) # O la variable donde tengas tu DB
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Ajusta el nombre de la tabla y columnas según tu base de datos real
+        # Aquí asumo que tienes una tabla 'videos' vinculada por 'email_usuario'
+        query = "SELECT * FROM videos WHERE email_usuario = ? ORDER BY id DESC"
+        cursor.execute(query, (email,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Convertir los resultados a una lista de diccionarios
+        videos_list = []
+        for row in rows:
+            video_dict = dict(row)
+            # Asegúrate de que los campos coincidan con lo que espera la extensión:
+            # id, archivo_url o url, archivo_nombre, guion, estado_bot, tipo
+            videos_list.append(video_dict)
+
+        if not videos_list:
+            return jsonify({"ok": True, "videos": [], "message": "No se encontraron videos"}), 200
+
+        return jsonify({
+            "ok": True,
+            "videos": videos_list
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_videos: {str(e)}")
+        return jsonify({"ok": False, "error": "server_error", "details": str(e)}), 500
 
