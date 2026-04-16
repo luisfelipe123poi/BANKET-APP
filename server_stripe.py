@@ -1183,37 +1183,41 @@ import os
 import azure.cognitiveservices.speech as speechsdk
 import uuid
 
-def generar_audio_azure(texto, ruta_audio, voz):
+def generar_audio_neural(texto, voz_id):
+    speech_key = os.getenv("AZURE_SPEECH_KEY")
+    region = os.getenv("AZURE_SPEECH_REGION")
+
+    if not speech_key or not region:
+        raise Exception("Azure Speech no configurado")
+
     speech_config = speechsdk.SpeechConfig(
-        subscription=os.getenv("AZURE_SPEECH_KEY"),
-        region=os.getenv("AZURE_SPEECH_REGION")
+        subscription=speech_key,
+        region=region
     )
 
-    speech_config.speech_synthesis_voice_name = voz
+    speech_config.speech_synthesis_voice_name = voz_id
+    speech_config.set_speech_synthesis_output_format(
+        speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
+    )
 
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=ruta_audio)
+    filename = f"audio_{uuid.uuid4().hex}.mp3"
+    path = f"/tmp/{filename}"
+
+    audio_config = speechsdk.audio.AudioOutputConfig(filename=path)
 
     synthesizer = speechsdk.SpeechSynthesizer(
         speech_config=speech_config,
         audio_config=audio_config
     )
 
-    ssml = f"""
-    <speak version="1.0" xml:lang="es-ES">
-        <voice name="{voz}">
-            <prosody rate="-5%" pitch="+2%">
-                {texto}
-            </prosody>
-        </voice>
-    </speak>
-    """
-
-    result = synthesizer.speak_ssml_async(ssml).get()
+    result = synthesizer.speak_text_async(texto).get()
 
     if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
         raise Exception("Error Azure TTS")
 
-    return ruta_audio
+    return path
+
+from flask import request, send_file
 
 @app.route("/tts/neural", methods=["POST"])
 def tts_neural():
