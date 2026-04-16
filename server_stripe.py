@@ -43,11 +43,15 @@ DATA_DIR = "/var/data"
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
+# 1. Creamos la app con todas las configuraciones (nombre y carpeta de templates)
 app = Flask(__name__, template_folder="templates")
 
-# CONFIGURACIÓN MAESTRA DE CORS (Una sola llamada)
-# Esto permite que cualquier origen acceda a tus rutas /api/
-CORS(app, resources={r"/*": {"origins": "*"}})
+# 2. Aplicamos CORS a esa instancia de la app
+CORS(app, resources={r"/*": {
+    "origins": ["https://metriclips.com", "http://127.0.0.1:5500"], # Añadí localhost por si testeas local
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -300,55 +304,6 @@ def metrics_event():
     conn.close()
 
     return jsonify({"ok": True})
-
-# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
-def ensure_db_schema():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # Obtener columnas actuales para no duplicar
-    cur.execute("PRAGMA table_info(licenses)")
-    cols = [c[1] for c in cur.fetchall()]
-
-    # --- TUS LOGICAS ORIGINALES (NO TOCAR) ---
-    if "credits_left" not in cols:
-        print("🛠️ Agregando columna credits_left")
-        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
-
-    if "expires_at" not in cols:
-        print("🛠️ Agregando columna expires_at")
-        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
-
-    # --- NUEVAS MÉTRICAS TIKTOK (AGREGADAS SIN ELIMINAR NADA) ---
-    
-    # 1. Columna de vinculación (El puente con TikTok)
-    if "tiktok_id" not in cols:
-        print("🛠️ Agregando columna tiktok_id")
-        cur.execute("ALTER TABLE licenses ADD COLUMN tiktok_id TEXT")
-
-    # 2. Métricas de interacción y rendimiento
-    metricas_nuevas = [
-        ("views", "INTEGER DEFAULT 0"),
-        ("likes", "INTEGER DEFAULT 0"),
-        ("comentarios", "INTEGER DEFAULT 0"),
-        ("compartidos", "INTEGER DEFAULT 0"),
-        ("guardados", "INTEGER DEFAULT 0"),
-        ("seguidores", "INTEGER DEFAULT 0"),
-        ("duracion", "REAL DEFAULT 0"),
-        ("retencion", "REAL DEFAULT 0"),
-        ("completado", "REAL DEFAULT 0"),
-        ("t_avg", "REAL DEFAULT 0"),
-        ("watchtime_total", "REAL DEFAULT 0")
-    ]
-
-    for nombre, tipo in metricas_nuevas:
-        if nombre not in cols:
-            print(f"🛠️ Agregando métrica: {nombre}")
-            cur.execute(f"ALTER TABLE licenses ADD COLUMN {nombre} {tipo}")
-
-    conn.commit()
-    conn.close()
-    print("✅ Base de datos verificada y actualizada correctamente.")    
     
     
 
@@ -412,7 +367,6 @@ def save_license(
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    ensure_db_schema()
 
     # -----------------------------
     # Tabla principal de licencias
@@ -471,40 +425,25 @@ def init_db():
 init_db()
 
 
-
-
-
-@app.route("/api/update_metrics", methods=["POST"])
-def update_metrics():
-    data = request.json
-    tiktok_id = data.get('tiktok_id')
-    
-    if not tiktok_id:
-        return jsonify({"ok": False, "error": "No TikTok ID"}), 400
-
-    # Construimos la consulta dinámicamente según lo que mande la extensión
-    campos = []
-    valores = []
-    for clave, valor in data.items():
-        if clave != 'tiktok_id':
-            campos.append(f"{clave} = ?")
-            valores.append(valor)
-    
-    if not campos:
-        return jsonify({"ok": True, "message": "Nada que actualizar"})
-
-    valores.append(tiktok_id)
-    query = f"UPDATE licenses SET {', '.join(campos)} WHERE tiktok_id = ?"
-
-    conn = get_db_connection()
+# --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
+def ensure_db_schema():
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute(query, valores)
+
+    cur.execute("PRAGMA table_info(licenses)")
+    cols = [c[1] for c in cur.fetchall()]
+
+    if "credits_left" not in cols:
+        print("🛠️ Agregando columna credits_left")
+        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
+
+    if "expires_at" not in cols:
+        print("🛠️ Agregando columna expires_at")
+        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
+
     conn.commit()
     conn.close()
-    
-    return jsonify({"ok": True})
 
-    
 
 
 # -------------------------
@@ -878,75 +817,6 @@ def mp_success():
 def mp_failure():
     return redirect("/cancel")
 
-
-@app.route("/api/test_inject/<video_id>")
-def test_inject(video_id):
-    # Valores por defecto si no se pasan por URL
-    v = request.args.get('v', 12500)
-    l = request.args.get('l', 850)
-    r = request.args.get('r', 65)
-    
-    # EL CORREO MAESTRO PARA LA PRUEBA
-    target_email = "luisfe507@gmail.com"
-
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Intentamos actualizar por si ya existe
-        cur.execute("""
-            UPDATE licenses 
-            SET views = ?, likes = ?, retencion = ? 
-            WHERE license_key = ? AND email = ?
-        """, (v, l, r, video_id, target_email))
-        
-        # Si no actualizó nada (rowcount == 0), es porque el video no existe para ese correo, lo insertamos
-        if cur.rowcount == 0:
-            cur.execute("""
-                INSERT INTO licenses (license_key, email, plan, status, views, likes, retencion)
-                VALUES (?, ?, 'pro', 'active', ?, ?, ?)
-            """, (video_id, target_email, v, l, r))
-        
-        conn.commit()
-        conn.close()
-        
-        return f"✅ Éxito: Video {video_id} vinculado a {target_email} con {v} views."
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
-
-@app.route("/api/license/info", methods=["GET"])
-def get_license_info_dashboard():
-    video_id = request.args.get("key", "").strip()
-    user_email = request.args.get("email", "").strip().lower()
-
-    if not video_id or not user_email:
-        return jsonify({"ok": False, "error": "Faltan parámetros"}), 400
-
-    conn = get_db_connection()
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    
-    # Buscamos el video que pertenezca a este correo
-    cur.execute("SELECT * FROM licenses WHERE email = ? AND license_key = ?", (user_email, video_id))
-    row = cur.fetchone()
-    conn.close()
-    
-    if not row:
-        return jsonify({
-            "ok": False, 
-            "error": f"El video {video_id} no está registrado bajo el correo {user_email}"
-        }), 404
-    
-    return jsonify({"ok": True, "license": dict(row)})
-
-@app.route("/api/debug_db")
-def debug_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT email, license_key FROM licenses")
-    rows = cur.fetchall()
-    conn.close()
-    return jsonify([dict(ix) for ix in rows])        
 
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
@@ -1358,95 +1228,7 @@ def metric_generation_success():
     conn.close()
 
     return jsonify({"ok": True})
-    
-@app.route('/api/guardar_guiones_app', methods=['POST', 'OPTIONS'])
-@app.route('/api/guardar_guiones_app/', methods=['POST', 'OPTIONS'])
-def guardar_guiones_app():
-    # 1. Manejo de Preflight CORS (Necesario para navegadores)
-    if request.method == 'OPTIONS':
-        return jsonify({"ok": True}), 200
 
-    try:
-        data = request.json
-        if not data:
-            return jsonify({"ok": False, "message": "No se recibieron datos JSON"}), 400
-
-        email = data.get('email')
-        guiones = data.get('guiones')
-
-        if not email or not guiones:
-            return jsonify({"ok": False, "message": "Faltan datos (email o guiones)"}), 400
-
-        # 2. Conexión a la base de datos
-        db_path = os.path.join(DATA_DIR, 'database.db')
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # 3. CREAR TABLA SI NO EXISTE (Soluciona el error 'no such table')
-        # Añadimos 'created_at' para tener un registro histórico
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS videos_cola (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT,
-                tipo TEXT,
-                estado_bot TEXT,
-                hora TEXT,
-                metadata TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        ahora = datetime.now().strftime("%H:%M")
-        
-        # 4. Inserción de los guiones
-        # Si 'guiones' es una lista, iteramos; si es un solo string, lo envolvemos
-        lista_guiones = guiones if isinstance(guiones, list) else [guiones]
-        
-        for texto in lista_guiones:
-            if texto.strip(): # Solo guardar si no está vacío
-                cursor.execute('''
-                    INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (email, "Guion IA", "pendiente", ahora, texto))
-        
-        conn.commit()
-        conn.close()
-        
-        print(f"✅ Guiones guardados exitosamente para: {email}")
-        return jsonify({"ok": True, "message": "Guiones sincronizados"}), 200
-        
-    except Exception as e:
-        print(f"❌ Error crítico en servidor: {e}")
-        return jsonify({"ok": False, "message": f"Error en base de datos: {str(e)}"}), 500
-
-@app.route('/api/obtener_guiones_pendientes', methods=['POST'])
-def obtener_guiones_pendientes():
-    data = request.json
-    email = data.get('email')
-    marcar_leido = data.get('marcar_leido', False)
-
-    if not email:
-        return jsonify({"ok": False}), 400
-
-    try:
-        conn = sqlite3.connect(os.path.join(DATA_DIR, 'database.db'))
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT id, metadata FROM videos_cola WHERE email = ? AND estado_bot = "pendiente"', (email,))
-        rows = cursor.fetchall()
-        
-        guiones = [row[1] for row in rows]
-        ids = [row[0] for row in rows]
-
-        if marcar_leido and ids:
-            placeholders = ','.join(['?'] * len(ids))
-            cursor.execute(f'UPDATE videos_cola SET estado_bot = "sincronizado" WHERE id IN ({placeholders})', ids)
-            conn.commit()
-
-        conn.close()
-        return jsonify({"ok": True, "guiones": guiones, "count": len(guiones)})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/metrics/generation-error", methods=["POST"])
 def metric_generation_error():
@@ -2139,44 +1921,6 @@ def create_free_license():
         "license": new_license
     })
 
-@app.route('/generar_guiones_ia', methods=['POST'])
-def generar_guiones_ia():
-    data = request.json
-    email = data.get('email')
-    nicho = data.get('nicho')
-    avatar = data.get('avatar')
-    edad = data.get('edad')
-    cantidad = data.get('cantidad', 10)
-
-    if not email or not nicho:
-        return jsonify({"ok": False, "error": "Datos incompletos"}), 400
-
-    # AQUÍ SE CONECTARÍA CON TU API DE LLAMA 3 / OPENAI
-    # Por ahora, simulamos la creación de guiones para la cola
-    guiones_generados = []
-    for i in range(int(cantidad)):
-        guiones_generados.append({
-            "tipo": f"Video {i+1} - {nicho}",
-            "estado_bot": "listo",
-            "hora": datetime.now().strftime("%H:%M"),
-            "prompt_usado": f"Target: {avatar}, Edad: {edad}"
-        })
-
-    # Guardar en SQLite para que TurboClips lo vea
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        for g in guiones_generados:
-            cursor.execute('''
-                INSERT INTO videos_cola (email, tipo, estado_bot, hora, metadata)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (email, g['tipo'], g['estado_bot'], g['hora'], json.dumps(g)))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True, "message": "Guiones sincronizados con la cola"})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})    
-
 @app.route("/buy-credits", methods=["GET"])
 def buy_credits():
     pack = request.args.get("pack")
@@ -2352,97 +2096,6 @@ def app_version():
         ]
     })
 
-# ==========================================================
-# ENDPOINTS PARA EXTENSIÓN (METRICLIPS)
-# ==========================================================
-
-@app.route("/api/vincular_video", methods=["POST"])
-def vincular_video():
-    data = request.json
-    license_key = data.get("license_key")
-    tiktok_id = data.get("tiktok_id")
-
-    if not license_key or not tiktok_id:
-        return jsonify({"ok": False, "error": "Faltan datos"}), 400
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("UPDATE licenses SET tiktok_id = ? WHERE license_key = ?", (tiktok_id, license_key))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/get_metrics/<license_key>", methods=["GET"])
-def get_video_metrics(license_key):
-    """
-    Endpoint para obtener las métricas de un video específico.
-    Se usa para rellenar los campos en blanco del editModal automáticamente.
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        
-        # Buscamos los datos actuales en la base de datos
-        cur.execute("SELECT views, likes, retencion FROM licenses WHERE license_key = ?", (license_key,))
-        row = cur.fetchone()
-        conn.close()
-        
-        if row:
-            # Convertimos a diccionario (p.ej. {"views": 1500, "likes": 200, "retencion": 45})
-            return jsonify(dict(row))
-        
-        # Si no existe, devolvemos valores en 0 para no romper el modal
-        return jsonify({"views": 0, "likes": 0, "retencion": 0})
-        
-    except Exception as e:
-        print(f"❌ Error en get_metrics: {str(e)}")
-        return jsonify({"error": "Error interno del servidor", "views": 0, "likes": 0, "retencion": 0}), 500
-
-@app.route("/api/validate-ia-usage", methods=["POST", "OPTIONS"])
-def validate_ia_usage():
-    # Manejo automático de preflight CORS
-    if request.method == "OPTIONS":
-        return jsonify({"ok": True}), 200
-
-    data = request.json
-    email = data.get("email")
-    
-    if not email:
-        return jsonify({"ok": False, "message": "Email requerido para validar uso"}), 400
-
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # 1. Contar usos de hoy (Límite de 1 para tu prueba)
-        cur.execute("""
-            SELECT COUNT(*) as total FROM metrics 
-            WHERE email = ? AND event = 'ia_gen' 
-            AND DATE(created_at) = DATE('now', 'localtime')
-        """, (email,))
-        
-        count = cur.fetchone()["total"]
-
-        if count >= 1000: # Cambia a 5 después de probar
-            conn.close()
-            return jsonify({
-                "ok": False, 
-                "message": f"🚫 Límite de prueba alcanzado ({count}/1). Vuelve mañana."
-            }), 429
-
-        # 2. Registrar el uso
-        cur.execute("INSERT INTO metrics (email, event) VALUES (?, 'ia_gen')", (email,))
-        conn.commit()
-        conn.close()
-
-        return jsonify({"ok": True, "count": count + 1})
-    
-    except Exception as e:
-        print(f"❌ Error en server: {str(e)}")
-        return jsonify({"ok": False, "message": "Error interno del servidor"}), 500
-
 
 @app.route("/cancel")
 def cancel():
@@ -2561,23 +2214,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
