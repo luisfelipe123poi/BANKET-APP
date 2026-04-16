@@ -15,13 +15,6 @@ from urllib.parse import urljoin
 import jwt
 import time
 from flask import redirect
-from flask import Flask, request, jsonify, render_template
-from flask import Flask, render_template
-import sqlite3
-import mercadopago
-from flask import Flask
-from flask_cors import CORS
-
 
 
 import os
@@ -32,27 +25,11 @@ from sib_api_v3_sdk.models import SendSmtpEmail
 import os
 import stripe
 
-print("🔍 AZURE KEY:", bool(os.getenv("AZURE_SPEECH_KEY")))
-print("🔍 AZURE REGION:", os.getenv("AZURE_SPEECH_REGION"))
+# Ruta absoluta del archivo actual (server_stripe.py)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
-import os
-
-DATA_DIR = "/var/data"
-
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
-
-# 1. Creamos la app con todas las configuraciones (nombre y carpeta de templates)
-app = Flask(__name__, template_folder="templates")
-
-# 2. Aplicamos CORS a esa instancia de la app
-CORS(app, resources={r"/*": {
-    "origins": ["https://metriclips.com", "http://127.0.0.1:5500"], # Añadí localhost por si testeas local
-    "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization"]
-}})
-
+# Ruta absoluta hacia la base de datos SQLite
+DB_PATH = os.path.join(BASE_DIR, "stripe_licenses.db")
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 
@@ -80,7 +57,6 @@ configuration.api_key["api-key"] = BREVO_API_KEY
 brevo_client = ApiClient(configuration)
 brevo_email_api = TransactionalEmailsApi(brevo_client)
 
-DB_PATH = os.path.join(DATA_DIR, "database.db")
 
 SECRET_KEY = "2dh3921-92jk1h82-92jh1929-1k28j192"
 
@@ -117,34 +93,7 @@ PLAN_DEFAULT_CREDITS = {
     "agency": 1200
 }
 
-EVENTS_VALIDOS = {
-    "generation_start",
-    "generation_success",
-    "generation_error"
-}
-
-# ======================
-# 💳 MERCADOPAGO CONFIG
-# ======================
-
-MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
-MP_PUBLIC_KEY = os.getenv("MP_PUBLIC_KEY")
-
-if not MP_ACCESS_TOKEN:
-    print("⚠️ MP_ACCESS_TOKEN no configurado")
-
-mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
-
-MP_PLANS = {
-    "starter": os.getenv("MP_PLAN_STARTER"),
-    "pro": os.getenv("MP_PLAN_PRO"),
-    "agency": os.getenv("MP_PLAN_AGENCY"),
-}
-
-
-
-
-
+app = Flask(__name__)
 
 
 # ------------------------------------------------------------
@@ -227,85 +176,6 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
-
-@app.route("/_debug/metrics", methods=["GET"])
-def debug_metrics():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT 
-           DATE(created_at) as dia,
-           COUNT(CASE WHEN event = 'generation_start' THEN 1 END) as total,
-           COUNT(CASE WHEN event = 'generation_success' THEN 1 END) as exitos,
-           COUNT(CASE WHEN event = 'generation_error' THEN 1 END) as errores
-
-        FROM metrics
-        GROUP BY dia
-        ORDER BY dia DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
-
-    return jsonify([dict(r) for r in rows])
-
-@app.route("/dashboard/metrics")
-def dashboard_metrics():
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT 
-           DATE(created_at) as dia,
-           COUNT(CASE WHEN event = 'generation_start' THEN 1 END) as total,
-           COUNT(CASE WHEN event = 'generation_success' THEN 1 END) as exitos,
-           COUNT(CASE WHEN event = 'generation_error' THEN 1 END) as errores,
-           COUNT(DISTINCT email) as usuarios
-        FROM metrics
-        GROUP BY dia
-        ORDER BY dia DESC
-
-
-    """)
-
-    rows = cur.fetchall()
-    conn.close()
-
-    return render_template("dashboard_metrics.html", data=rows)
-
-@app.route("/health", methods=["GET"])
-def health():
-    return {"ok": True, "status": "online"}, 200
-
-
-    
-
-@app.route("/metrics/event", methods=["POST"])
-def metrics_event():
-    data = request.get_json() or {}
-
-    email = data.get("email")
-    event = data.get("event")
-
-    if not email or not event:
-        return jsonify({"error": "email_and_event_required"}), 400
-
-    if event not in EVENTS_VALIDOS:
-        return jsonify({"error": "invalid_event"}), 400
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute(
-        "INSERT INTO metrics (email, event, created_at) VALUES (?, ?, datetime('now'))",
-        (email, event)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"ok": True})
-    
-    
 
 def save_license(
     license_key,
@@ -390,18 +260,6 @@ def init_db():
         );
     """)
 
-    # -----------------------------
-    # Tabla de métricas
-    # -----------------------------
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS metrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT,
-            event TEXT,
-            error TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
 
     # -----------------------------------------
     # Tabla de tokens para verificación de email
@@ -427,23 +285,35 @@ init_db()
 
 # --- AUTOFIX: borrar BD corrupta si falta alguna columna ---
 def ensure_db_schema():
+    import sqlite3
+    
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("PRAGMA table_info(licenses)")
-    cols = [c[1] for c in cur.fetchall()]
+    try:
+        cur.execute("PRAGMA table_info(licenses)")
+        cols = [c[1] for c in cur.fetchall()]
+    except:
+        cols = []
 
-    if "credits_left" not in cols:
-        print("🛠️ Agregando columna credits_left")
-        cur.execute("ALTER TABLE licenses ADD COLUMN credits_left INTEGER DEFAULT 0")
+    required_cols = [
+        "id", "license_key", "stripe_customer_id", "stripe_subscription_id",
+        "email", "plan", "status", "created_at", "updated_at",
+        "expires_at", "metadata", "credits", "credits_left"
+    ]
 
-    if "expires_at" not in cols:
-        print("🛠️ Agregando columna expires_at")
-        cur.execute("ALTER TABLE licenses ADD COLUMN expires_at TEXT")
+    # Si falta alguna columna, borrar BD y regenerar
+    if not all(col in cols for col in required_cols):
+        print("⚠️ BD corrupta detectada → regenerando...")
+        conn.close()
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+        init_db()
+    else:
+        conn.close()
 
-    conn.commit()
-    conn.close()
-
+# Ejecutar fix al iniciar servidor
+ensure_db_schema()
 
 
 # -------------------------
@@ -666,100 +536,6 @@ def request_code():
 
     return jsonify({"ok": True, "msg": "Código enviado"})
 
-@app.route("/mp/create_preference", methods=["POST"])
-def mp_create_preference():
-    data = request.json or {}
-
-    email = data.get("email")
-    plan = data.get("plan")  # starter | pro | agency
-
-    if not email or plan not in MP_PLANS:
-        return jsonify({"error": "invalid_data"}), 400
-
-    plan_id = MP_PLANS.get(plan)
-
-    preference_data = {
-        "payer": {
-            "email": email
-        },
-        "items": [
-            {
-                "title": f"TurboClips Plan {plan.capitalize()}",
-                "quantity": 1,
-                "unit_price": 1  # ⚠️ NO importa si usas plan_id
-            }
-        ],
-        "subscription_plan_id": plan_id,
-        "back_urls": {
-            "success": f"{PUBLIC_DOMAIN}/success",
-            "failure": f"{PUBLIC_DOMAIN}/cancel"
-        },
-        "auto_return": "approved",
-
-        "notification_url": f"{PUBLIC_DOMAIN}/mp/webhook"
-    }
-
-    preference = mp_sdk.preference().create(preference_data)
-
-    return jsonify({
-        "init_point": preference["response"]["init_point"],
-        "id": preference["response"]["id"]
-    })
-
-@app.route("/mp/webhook", methods=["POST"])
-def mp_webhook():
-    data = request.json
-
-    if not data:
-        return "ok", 200
-
-    topic = data.get("type") or data.get("topic")
-
-    if topic not in ("payment", "subscription"):
-        return "ok", 200
-
-    resource_id = data.get("data", {}).get("id")
-
-    try:
-        payment = mp_sdk.payment().get(resource_id)
-        payment_data = payment["response"]
-
-        if payment_data.get("status") != "approved":
-            return "ok", 200
-
-        email = payment_data["payer"]["email"]
-        plan = payment_data["description"].lower()
-
-        # MAPEAR plan
-        if "starter" in plan:
-            plan_key = "starter"
-            credits = 100
-        elif "pro" in plan:
-            plan_key = "pro"
-            credits = 300
-        elif "agency" in plan:
-            plan_key = "agency"
-            credits = 1200
-        else:
-            return "ok", 200
-
-        license_key = gen_license()
-
-        save_license(
-            license_key=license_key,
-            email=email,
-            plan=plan_key,
-            credits=credits,
-            status="active",
-            metadata={"source": "mercadopago"}
-        )
-
-        print(f"✅ Licencia creada vía MercadoPago: {email} | {plan_key}")
-
-    except Exception as e:
-        print("❌ Error MP webhook:", e)
-
-    return "ok", 200
 
 
 @app.route("/license/info", methods=["GET"])
@@ -809,15 +585,6 @@ def use_credit():
         "credits_left": lic["credits_left"] - 1
     })
 
-@app.route("/mp/success")
-def mp_success():
-    return redirect("/success")
-
-@app.route("/mp/failure")
-def mp_failure():
-    return redirect("/cancel")
-
-
 @app.route("/create-checkout-session", methods=["GET"])
 def create_checkout():
     email = request.args.get("email")
@@ -839,34 +606,6 @@ def create_checkout():
     except Exception as e:
         print("❌ Error creando checkout:", e)
         return jsonify({"ok": False, "error": str(e)}), 500
-
-@app.route("/create-customer", methods=["POST"])
-def create_customer():
-    data = request.json or {}
-    license_key = data.get("license_key")
-    email = data.get("email")
-
-    if not license_key or not email:
-        return jsonify({"error": "missing_data"}), 400
-
-    lic = get_license_by_key(license_key)
-    if not lic:
-        return jsonify({"error": "license_not_found"}), 404
-
-    if lic.get("stripe_customer_id"):
-        return jsonify({"customer_id": lic["stripe_customer_id"]})
-
-    customer = stripe.Customer.create(
-        email=email,
-        metadata={"license_key": license_key}
-    )
-
-    update_license_by_key(
-        license_key,
-        stripe_customer_id=customer.id
-    )
-
-    return jsonify({"customer_id": customer.id})
 
 
 @app.route("/auth/verify", methods=["GET"])
@@ -1049,69 +788,6 @@ def check_status():
         }
     })
 
-import os
-import azure.cognitiveservices.speech as speechsdk
-import uuid
-
-def generar_audio_neural(texto, voz_id):
-    speech_key = os.getenv("AZURE_SPEECH_KEY")
-    region = os.getenv("AZURE_SPEECH_REGION")
-
-    if not speech_key or not region:
-        raise Exception("Azure Speech no configurado")
-
-    speech_config = speechsdk.SpeechConfig(
-        subscription=speech_key,
-        region=region
-    )
-
-    speech_config.speech_synthesis_voice_name = voz_id
-    speech_config.set_speech_synthesis_output_format(
-        speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
-    )
-
-    filename = f"audio_{uuid.uuid4().hex}.mp3"
-    path = f"/tmp/{filename}"
-
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=path)
-
-    synthesizer = speechsdk.SpeechSynthesizer(
-        speech_config=speech_config,
-        audio_config=audio_config
-    )
-
-    result = synthesizer.speak_text_async(texto).get()
-
-    if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
-        raise Exception("Error Azure TTS")
-
-    return path
-
-from flask import request, send_file
-
-@app.route("/tts/neural", methods=["POST"])
-def tts_neural():
-    data = request.json or {}
-
-    texto = data.get("text")
-    voz = data.get("voice")
-
-    if not texto or not voz:
-        return {"ok": False, "error": "Texto y voz requeridos"}, 400
-
-    # 🔐 VALIDACIÓN CORRECTA (SIN DESEMPAQUETAR)
-    resp = validate_license()
-    if resp.status_code != 200:
-        return resp
-
-    audio_path = generar_audio_neural(texto, voz)
-
-    return send_file(
-        audio_path,
-        mimetype="audio/mpeg",
-        as_attachment=True
-    )
-
 
 # ========================================
 # 🔐 Endpoint para detectar conexión
@@ -1195,58 +871,6 @@ def get_license_by_device(device_id):
             return lic
     return None
 
-
-@app.route("/metrics/generation-start", methods=["POST"])
-def metric_generation_start():
-    data = request.get_json() or {}
-    email = data.get("email")
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO metrics (email, event) VALUES (?, ?)",
-        (email, "start")
-    )
-    conn.commit()
-    conn.close()
-
-    return jsonify({"ok": True})
-
-
-@app.route("/metrics/generation-success", methods=["POST"])
-def metric_generation_success():
-    data = request.get_json() or {}
-    email = data.get("email")
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO metrics (email, event) VALUES (?, ?)",
-        (email, "success")
-    )
-    conn.commit()
-    conn.close()
-
-    return jsonify({"ok": True})
-
-
-@app.route("/metrics/generation-error", methods=["POST"])
-def metric_generation_error():
-    data = request.get_json() or {}
-    email = data.get("email")
-    error = data.get("error")
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO metrics (email, event, error) VALUES (?, ?, ?)",
-        (email, "error", error)
-    )
-    conn.commit()
-    conn.close()
-
-    return jsonify({"ok": True})
-
 # -------------------------
 # Endpoints
 # -------------------------
@@ -1318,7 +942,7 @@ def create_portal_session():
 
 @app.route("/license/validate", methods=["POST"])
 def validate_license():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json() or {}
 
     key = data.get("license_key") or data.get("key")
     email = data.get("email")
@@ -1332,7 +956,7 @@ def validate_license():
         lic = get_license_by_key(key)
 
     if not lic:
-        return jsonify({"valid": False, "reason": "not_found"}), 200
+        return jsonify({"valid": False, "reason": "not_found"}), 404
 
     # ---------------------------------------------------
     # Convertir Row → dict SIEMPRE
@@ -1340,27 +964,12 @@ def validate_license():
     if not isinstance(lic, dict):
         lic = dict(lic)
 
-    # 🔒 aseguramos siempre el campo aunque sea FREE
-    lic["current_period_end"] = None
-
-    print("DEBUG license stripe_subscription_id:", lic.get("stripe_subscription_id"))
-
     # ============================================================
     # SINCRONIZACIÓN REAL CON STRIPE
     # ============================================================
     if lic.get("stripe_subscription_id"):
         try:
-            sub = stripe.Subscription.retrieve(
-                lic["stripe_subscription_id"],
-                expand=["latest_invoice"]
-            )
-
-            print("DEBUG Stripe subscription status:", sub.get("status"))
-            print("DEBUG Stripe current_period_end:", sub.get("current_period_end"))
-
-
-            # 🔥 FECHA REAL DE RENOVACIÓN (Stripe)
-            lic["current_period_end"] = sub.get("current_period_end")
+            sub = stripe.Subscription.retrieve(lic["stripe_subscription_id"])
 
             price_id = sub["items"]["data"][0]["price"]["id"]
             status = sub["status"]
@@ -1403,7 +1012,7 @@ def validate_license():
                 conn.commit()
                 conn.close()
 
-                return jsonify({"valid": False, "reason": "inactive"}), 200
+                return jsonify({"valid": False, "reason": "inactive"})
 
             # Guardar actualización normal
             conn = get_db_connection()
@@ -1427,15 +1036,6 @@ def validate_license():
 
         except Exception as e:
             print("⚠️ Stripe sync error:", e)
-            
-    if lic and "expires_at" not in lic:
-        lic["expires_at"] = None
-
-    expires_at = lic.get("expires_at")
-
-    if expires_at and not isinstance(expires_at, str):
-        expires_at = str(expires_at)
-
 
     # ============================================================
     # RESPUESTA
@@ -1448,9 +1048,7 @@ def validate_license():
             "plan": lic.get("plan", "free"),
             "status": lic.get("status", "active"),
             "credits": lic.get("credits", 0),
-            "credits_left": lic.get("credits_left", 0),
-            "expires_at": lic.get("expires_at")
-
+            "credits_left": lic.get("credits_left", 0)
         }
     })
 
@@ -1575,53 +1173,25 @@ def post_usage():
     key = data.get("license_key")
     action = data.get("action", "generic")
     cost = int(data.get("cost", 1))
-    modo = data.get("modo")  # "audio_upload" | "tts"
-
 
     if not key:
         return jsonify({"error": "license_key requerido"}), 400
 
     # Ensure license exists
     lic = get_license_by_key(key)
-    
-
     if not lic:
         return jsonify({"error": "license_not_found"}), 404
-
-    plan = (lic.get("plan") or "").lower()    
 
     # If license status not active, reject
     if lic.get("status") not in ("active", "trialing"):
         return jsonify({"error": "license_inactive", "status": lic.get("status")}), 403
 
-    # ♾️ Generación ilimitada: PRO / AGENCY + audio subido
-    if plan in ("pro", "agency") and modo == "audio_upload":
-        print("♾️ [SERVER] Ilimitado activo → NO se descuentan créditos")
-        return jsonify({
-            "ok": True,
-            "credits_left": lic.get("credits_left"),
-            "unlimited": True,
-            "action": action
-        })
-    
-
     # Decrement credits atomically
-    # ♾️ PRO / AGENCY + audio subido → NO descontar
-    if plan in ("pro", "agency") and modo == "audio_upload":
-        return jsonify({
-            "ok": True,
-            "credits_left": lic.get("credits_left"),
-            "unlimited": True,
-            "action": action
-        })
-
     new_left = adjust_credits_left(key, -cost)
+    if new_left is None:
+        return jsonify({"error": "db_error"}), 500
 
-    return jsonify({
-        "ok": True,
-        "credits_left": new_left,
-        "action": action
-    })
+    return jsonify({"ok": True, "credits_left": new_left, "action": action})
 
 # -------------------------
 # Webhook handling
@@ -1978,7 +1548,7 @@ def get_banner_ads():
             "segment": "free",
             "title": "NUEVA FUNCIÓN: Editor PRO",
             "subtitle": "Los usuarios PRO ya lo están usando.",
-            "image": "https://drive.google.com/uc?export=download&id=1_ruyZBqPja6QYF_YFSk3UQU7iliKZAjq",
+            "image": "https://drive.google.com/uc?export=download&id=1FmzuVNOrZ62kN3Vhsq7y-Jr2rDnsmzjh",
             "cta_text": "Actualizar ahora",
             "cta_url": "https://tu-pagina.com/upgrade",
             "expires": "2026-02-15"
@@ -1993,23 +1563,23 @@ def get_banner_ads():
 def ads_popup():
     ads = [
         {
-            "image": "https://drive.google.com/uc?export=download&id=1WQQOj5kguWDhyMe8SVaNFNMHqVIVCBxB",
+            "image": "https://drive.google.com/uc?export=download&id=1Z5CTKCq79PcUaWycIJ_2898waMseWROD",
             "cta_url": "https://tusitio.com/oferta1"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1efR38e-qtgtrPRGuTC6HWOx_p9gVQfK6",
+            "image": "https://drive.google.com/uc?export=download&id=15JzTgtE7IFyW6zI2kxRiAx3OOc7CFb_J",
             "cta_url": "https://tusitio.com/oferta2"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1hB3K5stcbBV8DWqk69Rez51rTYPmOKCc",
+            "image": "https://drive.google.com/uc?export=download&id=1WGs5_omS7-nlEJG4ItqJ8FRRNfybMgtu",
             "cta_url": "https://tusitio.com/oferta3"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1mSChZOUDkZfmLDVlTIRiXZbWgDk-7t6M",
+            "image": "https://drive.google.com/uc?export=download&id=1T-9yS9iq9aK1zeh36aFSl5O-sfOIS7kj",
             "cta_url": "https://tusitio.com/oferta4"
         },
         {
-            "image": "https://drive.google.com/uc?export=download&id=1-3r9jLKilue5pBUItsj8DuYE0x0coWjA",
+            "image": "https://drive.google.com/uc?export=download&id=1CVycJrhDGUzXtmDef_897MYZ0DBCwOBy",
             "cta_url": "https://tusitio.com/oferta4"
         }
 
@@ -2083,18 +1653,6 @@ def success():
     """
     return html
 
-@app.route("/app/version", methods=["GET"])
-def app_version():
-    return jsonify({
-        "version": "1.3.1",
-        "mandatory": False,
-        "url": "https://tuservidor.com/downloads/TurboClips.exe",
-        "changelog": [
-            "Mejoras de rendimiento",
-            "Corrección de errores de subtítulos",
-            "Auto-update agregado"
-        ]
-    })
 
 
 @app.route("/cancel")
@@ -2214,51 +1772,6 @@ def cancel():
         "license_key": license_key,
         "credits": credits_total
     })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
