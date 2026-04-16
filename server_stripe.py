@@ -2585,8 +2585,11 @@ def cancel():
     # ==============================================================
 # ENDPOINT PARA LA EXTENSIÓN: OBTENER VIDEOS POR EMAIL
 # ==============================================================
+# ==============================================================
+# ENDPOINT PARA LA EXTENSIÓN: OBTENER VIDEOS POR EMAIL (REFORZADO)
+# ==============================================================
 @app.route('/api/get-videos', methods=['GET'])
-def get_videos_by_email():
+def get_videos_by_email_ext():
     email = request.args.get('email')
     
     if not email:
@@ -2595,28 +2598,36 @@ def get_videos_by_email():
     email = email.lower().strip()
 
     try:
-        # Conexión a tu base de datos (asegúrate de que la ruta sea correcta)
-        conn = sqlite3.connect(DB_PATH) # O la variable donde tengas tu DB
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Ajusta el nombre de la tabla y columnas según tu base de datos real
-        # Aquí asumo que tienes una tabla 'videos' vinculada por 'email_usuario'
+        # 1. Buscamos todos los videos del usuario. 
+        # IMPORTANTE: Cambia 'email_usuario' por el nombre real de tu columna si es distinto.
         query = "SELECT * FROM videos WHERE email_usuario = ? ORDER BY id DESC"
         cursor.execute(query, (email,))
         rows = cursor.fetchall()
         conn.close()
 
-        # Convertir los resultados a una lista de diccionarios
         videos_list = []
         for row in rows:
             video_dict = dict(row)
-            # Asegúrate de que los campos coincidan con lo que espera la extensión:
-            # id, archivo_url o url, archivo_nombre, guion, estado_bot, tipo
-            videos_list.append(video_dict)
+            
+            # 2. MAPEADO DE SEGURIDAD:
+            # La extensión es muy estricta con los nombres. Forzamos los nombres correctos:
+            procesado = {
+                "id": video_dict.get("id"),
+                # Si tu columna de texto se llama 'texto' o 'prompt', lo movemos a 'guion'
+                "guion": video_dict.get("guion") or video_dict.get("texto") or video_dict.get("script") or "",
+                # Si la URL se llama 'url_video' o 'path', lo movemos a 'archivo_url'
+                "archivo_url": video_dict.get("archivo_url") or video_dict.get("url") or "",
+                # La extensión solo muestra videos si el estado es 'PENDIENTE' o 'EN ESPERA'
+                "estado_bot": (video_dict.get("estado_bot") or video_dict.get("status") or "PENDIENTE").upper(),
+                "tipo": video_dict.get("tipo") or "CORE"
+            }
+            videos_list.append(procesado)
 
-        if not videos_list:
-            return jsonify({"ok": True, "videos": [], "message": "No se encontraron videos"}), 200
+        # 3. Verificación de depuración en tu consola de Render/Terminal
+        print(f"DEBUG: Enviando {len(videos_list)} videos a la extensión para el correo: {email}")
 
         return jsonify({
             "ok": True,
@@ -2624,6 +2635,6 @@ def get_videos_by_email():
         }), 200
 
     except Exception as e:
-        print(f"❌ Error en get_videos: {str(e)}")
-        return jsonify({"ok": False, "error": "server_error", "details": str(e)}), 500
+        print(f"❌ Error crítico en get_videos: {str(e)}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
