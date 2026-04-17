@@ -2598,13 +2598,12 @@ def get_videos_by_email_ext():
 
     try:
         conn = get_db_connection()
-        conn.row_factory = sqlite3.Row # Esto nos permite leer por nombre de columna
+        conn.row_factory = sqlite3.Row 
         cursor = conn.cursor()
 
-        # Intentamos buscar por 'email_usuario' o 'email'. 
-        # Si tu columna se llama distinto, cámbiala aquí:
-        query = "SELECT * FROM videos WHERE email_usuario = ? OR email = ? ORDER BY id DESC"
-        cursor.execute(query, (email, email))
+        # 1. Ajustamos la consulta a TU tabla 'videos_cola' y TU columna 'email'
+        query = "SELECT * FROM videos_cola WHERE email = ? ORDER BY id DESC"
+        cursor.execute(query, (email,))
         rows = cursor.fetchall()
         conn.close()
 
@@ -2612,20 +2611,26 @@ def get_videos_by_email_ext():
         for row in rows:
             v = dict(row)
             
-            # MAPEADO INTELIGENTE: Buscamos cualquier columna que se parezca a lo que necesitamos
+            # Intentamos sacar la URL y el Guion desde tu columna 'metadata' 
+            # ya que en tu tabla 'videos_cola' no están como columnas sueltas
+            try:
+                meta_data = json.loads(v.get("metadata") or "{}")
+            except:
+                meta_data = {}
+
+            # 2. MAPEADO: Traducimos de 'videos_cola' -> a lo que la Extensión entiende
             video_procesado = {
                 "id": v.get("id"),
-                "guion": v.get("guion") or v.get("texto") or v.get("prompt") or v.get("script") or "Sin guion",
-                "archivo_url": v.get("archivo_url") or v.get("url") or v.get("video_url") or "",
-                "archivo_nombre": v.get("archivo_nombre") or v.get("nombre") or f"video_{v.get('id')}.mp4",
-                # FORZAMOS EL ESTADO: La extensión solo muestra si el estado es PENDIENTE o EN ESPERA
-                "estado_bot": "PENDIENTE", 
+                # Buscamos el guion en metadata o usamos el tipo
+                "guion": meta_data.get("guion") or meta_data.get("prompt") or f"Video {v.get('tipo')}",
+                # Buscamos la URL de R2 dentro de metadata
+                "archivo_url": meta_data.get("archivo_url") or meta_data.get("url") or "",
+                "archivo_nombre": meta_data.get("archivo_nombre") or f"video_{v.get('id')}.mp4",
+                # IMPORTANTE: Forzamos el estado que la extensión acepta
+                "estado_bot": (v.get("estado_bot") or "PENDIENTE").upper(),
                 "tipo": v.get("tipo") or "CORE"
             }
             videos_list.append(video_procesado)
-
-        # LOG PARA DEPURACIÓN: Esto lo verás en la consola de Render
-        print(f"DEBUG EXTENSIÓN: Encontrados {len(videos_list)} videos para {email}")
 
         return jsonify({
             "ok": True,
@@ -2633,21 +2638,5 @@ def get_videos_by_email_ext():
         }), 200
 
     except Exception as e:
-        print(f"❌ ERROR CRÍTICO API EXTENSIÓN: {str(e)}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-@app.route('/api/save-video', methods=['POST'])
-def save_video_ext():
-    data = request.json
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO videos (email_usuario, archivo_url, guion, estado_bot)
-            VALUES (?, ?, ?, ?)
-        ''', (data['email_usuario'], data['archivo_url'], data.get('guion', ''), 'PENDIENTE'))
-        conn.commit()
-        conn.close()
-        return jsonify({"ok": True})
-    except Exception as e:
+        print(f"❌ Error API Extensión: {str(e)}")
         return jsonify({"ok": False, "error": str(e)}), 500
