@@ -2635,3 +2635,19 @@ def get_videos_by_email_ext():
     except Exception as e:
         print(f"❌ ERROR CRÍTICO API EXTENSIÓN: {str(e)}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/save-video', methods=['POST'])
+def save_video_ext():
+    data = request.json
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO videos (email_usuario, archivo_url, guion, estado_bot)
+            VALUES (?, ?, ?, ?)
+        ''', (data['email_usuario'], data['archivo_url'], data.get('guion', ''), 'PENDIENTE'))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
