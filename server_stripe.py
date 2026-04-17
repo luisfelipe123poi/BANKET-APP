@@ -2601,7 +2601,7 @@ def get_videos_by_email_ext():
         conn.row_factory = sqlite3.Row 
         cursor = conn.cursor()
 
-        # 1. Ajustamos la consulta a TU tabla 'videos_cola' y TU columna 'email'
+        # Buscamos en tu tabla real 'videos_cola' usando tu columna 'email'
         query = "SELECT * FROM videos_cola WHERE email = ? ORDER BY id DESC"
         cursor.execute(query, (email,))
         rows = cursor.fetchall()
@@ -2611,26 +2611,31 @@ def get_videos_by_email_ext():
         for row in rows:
             v = dict(row)
             
-            # Intentamos sacar la URL y el Guion desde tu columna 'metadata' 
-            # ya que en tu tabla 'videos_cola' no están como columnas sueltas
+            # --- AQUÍ ESTÁ LA MAGIA ---
+            # Intentamos convertir el texto de metadata en un diccionario de Python
             try:
-                meta_data = json.loads(v.get("metadata") or "{}")
+                meta = json.loads(v.get("metadata") or "{}")
             except:
-                meta_data = {}
+                meta = {}
 
-            # 2. MAPEADO: Traducimos de 'videos_cola' -> a lo que la Extensión entiende
-            video_procesado = {
+            # Extraemos los datos de R2 que están dentro de metadata
+            # Buscamos 'url' o 'archivo_url' dentro del JSON
+            r2_link = meta.get("url") or meta.get("archivo_url") or meta.get("video_url") or ""
+            guion_video = meta.get("guion") or meta.get("prompt") or f"Video {v.get('tipo')}"
+
+            # Construimos el objeto exacto que la extensión SI entiende
+            video_formateado = {
                 "id": v.get("id"),
-                # Buscamos el guion en metadata o usamos el tipo
-                "guion": meta_data.get("guion") or meta_data.get("prompt") or f"Video {v.get('tipo')}",
-                # Buscamos la URL de R2 dentro de metadata
-                "archivo_url": meta_data.get("archivo_url") or meta_data.get("url") or "",
-                "archivo_nombre": meta_data.get("archivo_nombre") or f"video_{v.get('id')}.mp4",
-                # IMPORTANTE: Forzamos el estado que la extensión acepta
-                "estado_bot": (v.get("estado_bot") or "PENDIENTE").upper(),
+                "archivo_url": r2_link, # Ahora la extensión sí verá el link de R2
+                "guion": guion_video,
+                "archivo_nombre": f"video_{v.get('id')}.mp4",
+                "estado_bot": "PENDIENTE", # Forzamos para que la extensión no lo oculte
                 "tipo": v.get("tipo") or "CORE"
             }
-            videos_list.append(video_procesado)
+            
+            # Solo enviamos el video si realmente tiene un link de R2
+            if video_formateado["archivo_url"]:
+                videos_list.append(video_formateado)
 
         return jsonify({
             "ok": True,
@@ -2638,5 +2643,5 @@ def get_videos_by_email_ext():
         }), 200
 
     except Exception as e:
-        print(f"❌ Error API Extensión: {str(e)}")
+        print(f"❌ Error crítico procesando R2: {str(e)}")
         return jsonify({"ok": False, "error": str(e)}), 500
