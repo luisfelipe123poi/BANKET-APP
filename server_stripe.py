@@ -1915,36 +1915,36 @@ def webhook():
 
         if mode == "subscription":
             email = session["customer_details"]["email"]
-            subscription_id = session.get("subscription")
-            customer_id = session.get("customer")
- 
-            # 🔥 FIX: NO usar line_items (puede venir vacío o tarde)
-            # mejor usar metadata si la envías desde checkout
-            price_id = session.get("metadata", {}).get("price_id")
- 
-            # fallback por seguridad (si metadata no existe)
+
+            subscription_id = getattr(session, "subscription", None)
+            customer_id = getattr(session, "customer", None)
+
+            # metadata (FIX)
+            metadata = getattr(session, "metadata", {}) or {}
+            price_id = metadata.get("price_id")
+
+            # fallback Stripe line items
             if not price_id:
                 line_items = stripe.checkout.Session.list_line_items(session["id"])
                 price_id = line_items.data[0].price.id if line_items.data else None
- 
+
             plan = plan_map.get(price_id, "starter")
             plan_credits = credits_map[plan]
- 
+
             print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
- 
+
             existing = get_license_by_email(email)
-   
+
             conn = get_db_connection()
             cur = conn.cursor()
- 
+
             if existing:
-                # 🔥 SUMAR créditos existentes + créditos del plan
                 existing_credits = int(existing.get("credits", 0) or 0)
                 existing_credits_left = int(existing.get("credits_left", 0) or 0)
- 
+
                 new_total_credits = existing_credits + plan_credits
                 new_credits_left = existing_credits_left + plan_credits
- 
+
                 cur.execute("""
                     UPDATE licenses SET 
                         plan=?,
@@ -1963,7 +1963,7 @@ def webhook():
                     subscription_id,
                     email
                 ))
- 
+
             else:
                 new_key = gen_license()
                 save_license(
@@ -1975,15 +1975,14 @@ def webhook():
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id
                 )
- 
+
             conn.commit()
             conn.close()
 
-
-        # 🟦 PAGOS ÚNICOS (PACKS DE CRÉDITOS)
-        elif session.get("mode") == "payment":
-            email = session.get("customer_email")
-            metadata = session.get("metadata", {})
+        # 🟦 PAGOS ÚNICOS
+        elif getattr(session, "mode", None) == "payment":
+            email = getattr(session, "customer_email", None)
+            metadata = getattr(session, "metadata", {}) or {}
 
             pack = metadata.get("pack")
             credits_to_add = metadata.get("credits") or pack
@@ -2001,14 +2000,15 @@ def webhook():
 
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(
-                        """
+                    cur.execute("""
                         UPDATE licenses 
                         SET credits = ?, credits_left = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE license_key = ?
-                        """,
-                        (new_credits, new_credits_left, lic["license_key"])
-                    )
+                    """, (
+                        new_credits,
+                        new_credits_left,
+                        lic["license_key"]
+                    ))
                     conn.commit()
                     conn.close()
 
@@ -2016,15 +2016,12 @@ def webhook():
                 else:
                     print("❌ Pago recibido pero no existe licencia para:", email)
 
-
-
     # ============================================================
-    # OTROS EVENTOS → IGNORAR PERO RESPONDER OK
+    # OTROS EVENTOS
     # ============================================================
     else:
         print(f"ℹ Evento ignorado: {event_type}")
 
-    # 🔥 ESTO ES OBLIGATORIO
     return "OK", 200
 
 
