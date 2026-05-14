@@ -1951,8 +1951,8 @@ def webhook():
                 existing_credits = int(existing.get("credits", 0) or 0)
                 existing_credits_left = int(existing.get("credits_left", 0) or 0)
 
-                new_total_credits = existing_credits + plan_credits
-                new_credits_left = existing_credits_left + plan_credits
+                new_total_credits = plan_credits
+                new_credits_left = plan_credits
 
                 cur.execute("""
                     UPDATE licenses SET 
