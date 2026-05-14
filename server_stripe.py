@@ -1906,69 +1906,78 @@ def webhook():
     }
 
     # ============================================================
-    # CHECKOUT COMPLETED
-    # ============================================================
-    if event_type == "checkout.session.completed":
+# CHECKOUT COMPLETED
+# ============================================================
+if event_type == "checkout.session.completed":
 
-        # 🟩 SUSCRIPCIONES
-        if session.get("mode") == "subscription":
-            email = session["customer_details"]["email"]
-            subscription_id = session.get("subscription")
-            customer_id = session.get("customer")
+    # 🟩 SUSCRIPCIONES
+    mode = getattr(session, "mode", None)
 
+    if mode == "subscription":
+        email = session["customer_details"]["email"]
+        subscription_id = session.get("subscription")
+        customer_id = session.get("customer")
+
+        # 🔥 FIX: NO usar line_items (puede venir vacío o tarde)
+        # mejor usar metadata si la envías desde checkout
+        price_id = session.get("metadata", {}).get("price_id")
+
+        # fallback por seguridad (si metadata no existe)
+        if not price_id:
             line_items = stripe.checkout.Session.list_line_items(session["id"])
-            price_id = line_items.data[0].price.id
+            price_id = line_items.data[0].price.id if line_items.data else None
 
-            plan = plan_map.get(price_id, "starter")
-            plan_credits = credits_map[plan]
+        plan = plan_map.get(price_id, "starter")
+        plan_credits = credits_map[plan]
 
-            print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
+        print(f"🆕 Nueva SUSCRIPCIÓN {email} → {plan}")
 
-            existing = get_license_by_email(email)
+        existing = get_license_by_email(email)
 
-            conn = get_db_connection()
-            cur = conn.cursor()
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-            if existing:
-                # 🔥 SUMAR créditos existentes + créditos del plan
-                existing_credits = int(existing.get("credits", 0) or 0)
-                existing_credits_left = int(existing.get("credits_left", 0) or 0)
+        if existing:
+            # 🔥 SUMAR créditos existentes + créditos del plan
+            existing_credits = int(existing.get("credits", 0) or 0)
+            existing_credits_left = int(existing.get("credits_left", 0) or 0)
 
-                new_total_credits = existing_credits + plan_credits
-                new_credits_left = existing_credits_left + plan_credits
+            new_total_credits = existing_credits + plan_credits
+            new_credits_left = existing_credits_left + plan_credits
 
-                cur.execute("""
-                    UPDATE licenses SET 
-                        plan=?,
-                        credits=?,
-                        credits_left=?,
-                        status='active',
-                        stripe_customer_id=?,
-                        stripe_subscription_id=?
-                    WHERE email=?
-                """, (
-                    plan,
-                    new_total_credits,
-                    new_credits_left,
-                    customer_id,
-                    subscription_id,
-                    email
-                ))
+            cur.execute("""
+                UPDATE licenses SET 
+                    plan=?,
+                    credits=?,
+                    credits_left=?,
+                    status='active',
+                    stripe_customer_id=?,
+                    stripe_subscription_id=?,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE email=?
+            """, (
+                plan,
+                new_total_credits,
+                new_credits_left,
+                customer_id,
+                subscription_id,
+                email
+            ))
 
-            else:
-                new_key = gen_license()
-                save_license(
-                    license_key=new_key,
-                    email=email,
-                    plan=plan,
-                    credits=plan_credits,
-                    status="active",
-                    stripe_customer_id=customer_id,
-                    stripe_subscription_id=subscription_id
-                )
+        else:
+            new_key = gen_license()
+            save_license(
+                license_key=new_key,
+                email=email,
+                plan=plan,
+                credits=plan_credits,
+                status="active",
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id
+            )
 
-            conn.commit()
-            conn.close()
+        conn.commit()
+        conn.close()
 
 
         # 🟦 PAGOS ÚNICOS (PACKS DE CRÉDITOS)
