@@ -141,9 +141,9 @@ MP_PLANS = {
 
 PLAN_LIMITS = {
     "free": 1,
-    "starter": 12,
-    "pro": 32,
-    "agency": 120
+    "starter": 2,
+    "pro": 3,
+    "agency": 4
 }
 
 
