@@ -139,7 +139,12 @@ MP_PLANS = {
 
 
 
-
+PLAN_LIMITS = {
+    "free": 1,
+    "starter": 12,
+    "pro": 32,
+    "agency": 120
+}
 
 
 
@@ -2422,46 +2427,79 @@ def get_video_metrics(license_key):
 
 @app.route("/api/validate-ia-usage", methods=["POST", "OPTIONS"])
 def validate_ia_usage():
-    # Manejo automático de preflight CORS
     if request.method == "OPTIONS":
         return jsonify({"ok": True}), 200
 
     data = request.json
     email = data.get("email")
-    
+
     if not email:
-        return jsonify({"ok": False, "message": "Email requerido para validar uso"}), 400
+        return jsonify({"ok": False, "message": "Email requerido"}), 400
 
     try:
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # 1. Contar usos de hoy (Límite de 1 para tu prueba)
+        # 1. Obtener licencia del usuario
         cur.execute("""
-            SELECT COUNT(*) as total FROM metrics 
-            WHERE email = ? AND event = 'ia_gen' 
-            AND DATE(created_at) = DATE('now', 'localtime')
+            SELECT plan FROM licenses WHERE email = ? ORDER BY created_at DESC LIMIT 1
         """, (email,))
-        
-        count = cur.fetchone()["total"]
 
-        if count >= 1000: # Cambia a 5 después de probar
+        row = cur.fetchone()
+
+        if not row:
             conn.close()
             return jsonify({
-                "ok": False, 
-                "message": f"🚫 Límite de prueba alcanzado ({count}/1). Vuelve mañana."
+                "ok": False,
+                "message": "Usuario sin licencia activa"
+            }), 403
+
+        plan = (row["plan"] or "free").lower()
+
+        # 2. Límite según plan
+        limit = PLAN_LIMITS.get(plan, 1)
+
+        # 3. Contar usos del día
+        cur.execute("""
+            SELECT COUNT(*) as total 
+            FROM metrics 
+            WHERE email = ? 
+            AND event = 'ia_gen'
+            AND DATE(created_at) = DATE('now', 'localtime')
+        """, (email,))
+
+        count = cur.fetchone()["total"]
+
+        # 4. Validar límite
+        if count >= limit:
+            conn.close()
+            return jsonify({
+                "ok": False,
+                "plan": plan,
+                "limit": limit,
+                "used": count,
+                "message": f"🚫 Límite alcanzado ({count}/{limit})"
             }), 429
 
-        # 2. Registrar el uso
-        cur.execute("INSERT INTO metrics (email, event) VALUES (?, 'ia_gen')", (email,))
+        # 5. Registrar uso
+        cur.execute("""
+            INSERT INTO metrics (email, event)
+            VALUES (?, 'ia_gen')
+        """, (email,))
+
         conn.commit()
         conn.close()
 
-        return jsonify({"ok": True, "count": count + 1})
-    
+        return jsonify({
+            "ok": True,
+            "plan": plan,
+            "limit": limit,
+            "used": count + 1
+        })
+
     except Exception as e:
-        print(f"❌ Error en server: {str(e)}")
-        return jsonify({"ok": False, "message": "Error interno del servidor"}), 500
+        print("❌ Error:", e)
+        return jsonify({"ok": False, "message": "Error interno"}), 500
 
 
 @app.route("/cancel")
