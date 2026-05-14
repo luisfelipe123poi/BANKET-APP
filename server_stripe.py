@@ -1919,8 +1919,17 @@ def webhook():
             subscription_id = getattr(session, "subscription", None)
             customer_id = getattr(session, "customer", None)
 
-            # metadata (FIX)
-            metadata = getattr(session, "metadata", {}) or {}
+            # 🔥 FIX REAL: metadata SIEMPRE normalizada a dict seguro
+            raw_metadata = getattr(session, "metadata", None)
+
+            if isinstance(raw_metadata, dict):
+                metadata = raw_metadata
+            else:
+                try:
+                    metadata = dict(raw_metadata) if raw_metadata else {}
+                except:
+                    metadata = {}
+
             price_id = metadata.get("price_id")
 
             # fallback Stripe line items
@@ -1982,7 +1991,16 @@ def webhook():
         # 🟦 PAGOS ÚNICOS
         elif getattr(session, "mode", None) == "payment":
             email = getattr(session, "customer_email", None)
-            metadata = getattr(session, "metadata", {}) or {}
+
+            raw_metadata = getattr(session, "metadata", None)
+
+            if isinstance(raw_metadata, dict):
+                metadata = raw_metadata
+            else:
+                try:
+                    metadata = dict(raw_metadata) if raw_metadata else {}
+                except:
+                    metadata = {}
 
             pack = metadata.get("pack")
             credits_to_add = metadata.get("credits") or pack
@@ -2023,7 +2041,6 @@ def webhook():
         print(f"ℹ Evento ignorado: {event_type}")
 
     return "OK", 200
-
 
 @app.route("/buy-credits-success", methods=["GET"])
 def buy_credits_success():
